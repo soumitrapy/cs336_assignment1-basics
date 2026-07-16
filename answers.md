@@ -9,5 +9,6 @@
 - c. any 2-byte with not of the from 110xxxxx 10xxxxxx
 
 # Problem (train_bpe_tinystories): BPE Training on TinyStories (2 points)
-- a. Time: 38 sec (don't use tracemalloc during time computation), Memory: 28 MB (peak)
+- a. Time: 182 sec (don't use tracemalloc during time computation), Memory: 28 MB (peak)
 longest token in vocab: b' accomplishment'
+- b. Merging is taking much time.

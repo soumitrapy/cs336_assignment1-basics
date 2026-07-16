@@ -145,13 +145,13 @@ def train_bpe(
 
 def main():
     # input_path = "data/sample.txt"
-    # input_path = "data/TinyStoriesV2-GPT4-train-1k.txt"
+    #input_path = "data/TinyStoriesV2-GPT4-train-10k.txt"
     #input_path = "data/TinyStoriesV2-GPT4-train.txt"
     input_path = "data/TinyStoriesV2-GPT4-valid.txt"
     vocab_size = 10000
     special_tokens = [b"<|endoftext|>"]  # , b"<|unknown|>"]
     split_special_token = b"<|endoftext|>"
-    desired_num_chunks = 50
+    desired_num_chunks = 20
     pretokenization_pattern = (
         r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     )
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     main()
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats('cumtime')
-    stats.print_stats(30)  # Print the top 10 functions by cumulative time
+    #stats.print_stats(30)  # Print the top 10 functions by cumulative time
     end_time = time.time()
     #current, peak = tracemalloc.get_traced_memory()
     print(f"Time taken: {end_time - start_time} seconds")
