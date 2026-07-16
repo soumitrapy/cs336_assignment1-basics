@@ -87,7 +87,7 @@ if __name__ == "__main__":
     # input_path = "data/TinyStoriesV2-GPT4-train-10k.txt"
     #input_path = "data/TinyStoriesV2-GPT4-valid.txt"
     vocab_size = 8000
-    special_tokens = [b"<|endoftext|>", b"<|unknown|>"]
+    special_tokens = [b"<|endoftext|>"]#, b"<|unknown|>"]
     split_special_token = b"<|endoftext|>"
     desired_num_chunks = 10
     pretokenization_pattern = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
