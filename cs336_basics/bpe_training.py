@@ -140,17 +140,20 @@ def train_bpe(
 
 if __name__ == "__main__":
     import time
+    import tracemalloc
+    #tracemalloc.start()
     start_time = time.time()
-    # input_path = "data/sample.txt"
+    #input_path = "data/sample.txt"
     #input_path = "data/TinyStoriesV2-GPT4-train-1k.txt"
     input_path = "data/TinyStoriesV2-GPT4-train.txt"
     #input_path = "data/TinyStoriesV2-GPT4-valid.txt"
     vocab_size = 10000
-    special_tokens = [b"<|endoftext|>", b"<|unknown|>"]
+    special_tokens = [b"<|endoftext|>"]#, b"<|unknown|>"]
     split_special_token = b"<|endoftext|>"
     desired_num_chunks = 200
     pretokenization_pattern = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-    save_path = "checkpoints/bpe_tokenizer_train.pkl"
+    save_path = "checkpoints/train_bpe_tinystories.pkl"
+    #save_path = None
     vocab, merges = train_bpe(input_path=input_path,
                               vocab_size=vocab_size,
                               special_tokens=special_tokens,
@@ -159,6 +162,10 @@ if __name__ == "__main__":
                               pretokenization_pattern=pretokenization_pattern,
                               save_path=save_path)
     end_time = time.time()
-    print(f"chunks: {desired_num_chunks}, Time: {end_time - start_time} seconds, file: {input_path}, vocab size: {vocab_size}")
+    #current, peak = tracemalloc.get_traced_memory()
+    #tracemalloc.stop()
+    print(f"Time taken: {end_time - start_time} seconds")
+    #print(f"Current memory usage: {current / 10**6} MB; Peak: {peak / 10**6} MB")
+    print(f"chunks: {desired_num_chunks}, file: {input_path}, vocab size: {vocab_size}")
     print(merges[-10:])
     print(len(vocab), len(merges))
