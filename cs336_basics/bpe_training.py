@@ -41,7 +41,13 @@ def pretokenization(
     pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
 ) -> dict[tuple[bytes, ...], int]:
     boundaries = find_chunk_boundaries(file=file, desired_num_chunks=desired_num_chunks, split_special_token=split_special_token)
-    chunks = [file.read(boundaries[i + 1] - boundaries[i]) for i in range(len(boundaries) - 1)]
+    chunks = []
+    for i in range(len(boundaries) - 1):
+        start, end = boundaries[i], boundaries[i + 1]
+        file.seek(start)
+        chunk = file.read(end - start)
+        chunks.append(chunk)
+
     with Pool(processes=desired_num_chunks) as pool:
         results = pool.starmap(pretokenization_chunk, [(chunk, special_tokens, pretokenization_pattern) for chunk in chunks])
     pretokens = {}
@@ -145,7 +151,7 @@ def main():
     vocab_size = 10000
     special_tokens = [b"<|endoftext|>"]  # , b"<|unknown|>"]
     split_special_token = b"<|endoftext|>"
-    desired_num_chunks = 20
+    desired_num_chunks = 50
     pretokenization_pattern = (
         r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     )
