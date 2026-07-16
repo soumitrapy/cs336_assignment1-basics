@@ -7,3 +7,7 @@
 - a. UTF-8 is compact (space efficient), ASCII-compatible, widely used in practice.
 - b. the decode function decodes each byte individually from each byte string, it will work for ASCII chartacters as these characters only converts into one byte for any Non-ASCII charatters it is transferred into multiple bytes, so for those case individual byte does not represent any valid characters so for any non-ASCII characters we will get error.
 - c. any 2-byte with not of the from 110xxxxx 10xxxxxx
+
+# Problem (train_bpe_tinystories): BPE Training on TinyStories (2 points)
+- a. Time: 38 sec (don't use tracemalloc during time computation), Memory: 28 MB (peak)
+longest token in vocab: b' accomplishment'
