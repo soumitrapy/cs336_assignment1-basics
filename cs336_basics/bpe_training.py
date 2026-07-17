@@ -139,24 +139,30 @@ def train_bpe(
     # saving
     if save_path:
         with open(save_path, "wb") as f:
-            pickle.dump({"vocab": vocab, "merges": merges}, f)
+            pickle.dump({"vocab": vocab, 
+                         "merges": merges, 
+                         "pretokenization_pattern": pretokenization_pattern
+                        }, f)
     
     return vocab, merges
 
 def main():
     # input_path = "data/sample.txt"
-    #input_path = "data/TinyStoriesV2-GPT4-train-10k.txt"
-    #input_path = "data/TinyStoriesV2-GPT4-train.txt"
-    input_path = "data/TinyStoriesV2-GPT4-valid.txt"
-    vocab_size = 10000
+    # input_path = "data/TinyStoriesV2-GPT4-train-1k.txt"
+    # input_path = "data/TinyStoriesV2-GPT4-train.txt"
+    # input_path = "data/TinyStoriesV2-GPT4-valid.txt"
+    input_path = "data/owt_train.txt"
+    vocab_size = 32000
     special_tokens = [b"<|endoftext|>"]  # , b"<|unknown|>"]
     split_special_token = b"<|endoftext|>"
-    desired_num_chunks = 20
+    desired_num_chunks = 200
     pretokenization_pattern = (
         r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     )
-    #save_path = "checkpoints/train_bpe_tinystories.pkl"
-    save_path = None
+    # save_path = "checkpoints/train_bpe_tinystories.pkl"
+    save_path = "checkpoints/bpe_owt.pkl"
+    # save_path = None
+    print(f"Training on: file: {input_path}, vocab size: {vocab_size}, chunks: {desired_num_chunks}")
     vocab, merges = train_bpe(
         input_path=input_path,
         vocab_size=vocab_size,
@@ -166,7 +172,6 @@ def main():
         pretokenization_pattern=pretokenization_pattern,
         save_path=save_path,
     )
-    print(f"chunks: {desired_num_chunks}, file: {input_path}, vocab size: {vocab_size}")
     print(merges[-10:])
     print(len(vocab), len(merges))
 
