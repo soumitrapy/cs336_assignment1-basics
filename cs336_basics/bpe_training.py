@@ -3,6 +3,7 @@ import regex as re
 from typing import BinaryIO
 from multiprocessing import Pool
 import pickle
+from tqdm import tqdm
 
 def initialize_vocab(special_tokens: list[bytes]) -> dict[int, bytes]:
     vocab = {}
@@ -115,6 +116,7 @@ def train_bpe(
     vocab = initialize_vocab(special_tokens)
 
     # pretokenization
+    print(f"Pretokenizing with {desired_num_chunks} chunk(s)...")
     pretokens = pretokenization(
         file = file,
         desired_num_chunks=desired_num_chunks,
@@ -132,12 +134,15 @@ def train_bpe(
             pairs[pair] = pairs.get(pair, 0) + freq
 
     # Merging
-    while len(vocab) < vocab_size:
-        pairs, pretokens, vocab, merges = merge_pairs(pairs, pretokens, vocab, merges)
-        if not pairs:
-            break
+    with tqdm(total=vocab_size - len(vocab), desc="Merging pairs...") as pbar:
+        while len(vocab) < vocab_size:
+            pairs, pretokens, vocab, merges = merge_pairs(pairs, pretokens, vocab, merges)
+            if not pairs:
+                break
+            pbar.update(1)
     # saving
     if save_path:
+        print(f"Saving to {save_path}...")
         with open(save_path, "wb") as f:
             pickle.dump({"vocab": vocab, 
                          "merges": merges, 
@@ -147,21 +152,23 @@ def train_bpe(
     return vocab, merges
 
 def main():
+    import os
     # input_path = "data/sample.txt"
-    # input_path = "data/TinyStoriesV2-GPT4-train-1k.txt"
+    input_path = "data/TinyStoriesV2-GPT4-train-10k.txt"
     # input_path = "data/TinyStoriesV2-GPT4-train.txt"
     # input_path = "data/TinyStoriesV2-GPT4-valid.txt"
-    input_path = "data/owt_train.txt"
-    vocab_size = 32000
+    # input_path = "data/owt_train.txt"
+    save_path = "checkpoints/train_bpe_tinystories10k.pkl"
+    # save_path = "checkpoints/train_bpe_tinystories.pkl"
+    # save_path = "checkpoints/bpe_owt.pkl"
+    # save_path = None
+    vocab_size = 3200
     special_tokens = [b"<|endoftext|>"]  # , b"<|unknown|>"]
     split_special_token = b"<|endoftext|>"
-    desired_num_chunks = 200
+    desired_num_chunks = os.cpu_count()*2  # Use the number of CPU cores for parallel processing
     pretokenization_pattern = (
         r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     )
-    # save_path = "checkpoints/train_bpe_tinystories.pkl"
-    save_path = "checkpoints/bpe_owt.pkl"
-    # save_path = None
     print(f"Training on: file: {input_path}, vocab size: {vocab_size}, chunks: {desired_num_chunks}")
     vocab, merges = train_bpe(
         input_path=input_path,
