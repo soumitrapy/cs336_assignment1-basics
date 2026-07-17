@@ -20,6 +20,7 @@ dependencies = [
     "ty>=0.0.26",
     "ruff>=0.15.8",
     "ipykernel>=7.3.0",
+    "fire>=0.7.1",
 ]
 
 [build-system]

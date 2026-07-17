@@ -1,3 +1,5 @@
+import yaml
+
 from .pretokenization_example import find_chunk_boundaries
 import regex as re
 from typing import BinaryIO
@@ -151,47 +153,27 @@ def train_bpe(
     
     return vocab, merges
 
-def main():
-    import os
-    # input_path = "data/sample.txt"
-    input_path = "data/TinyStoriesV2-GPT4-train-10k.txt"
-    # input_path = "data/TinyStoriesV2-GPT4-train.txt"
-    # input_path = "data/TinyStoriesV2-GPT4-valid.txt"
-    # input_path = "data/owt_train.txt"
-    save_path = "checkpoints/train_bpe_tinystories10k.pkl"
-    # save_path = "checkpoints/train_bpe_tinystories.pkl"
-    # save_path = "checkpoints/bpe_owt.pkl"
-    # save_path = None
-    vocab_size = 3200
-    special_tokens = [b"<|endoftext|>"]  # , b"<|unknown|>"]
-    split_special_token = b"<|endoftext|>"
-    desired_num_chunks = os.cpu_count()*2  # Use the number of CPU cores for parallel processing
-    pretokenization_pattern = (
-        r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-    )
-    print(f"Training on: file: {input_path}, vocab size: {vocab_size}, chunks: {desired_num_chunks}")
-    vocab, merges = train_bpe(
-        input_path=input_path,
-        vocab_size=vocab_size,
-        special_tokens=special_tokens,
-        split_special_token=split_special_token,
-        desired_num_chunks=desired_num_chunks,
-        pretokenization_pattern=pretokenization_pattern,
-        save_path=save_path,
-    )
+
+def main(**kwargs):
+    from .utils import load_config
+    config = load_config("configs/bpe_training_config.yaml", kwargs)
+    print(f"Training on: file: {config['input_path']}, vocab size: {config['vocab_size']}, chunks: {config['desired_num_chunks']}")
+    vocab, merges = train_bpe(**config)
     print(merges[-10:])
     print(len(vocab), len(merges))
 
 if __name__ == "__main__":
+    import fire
     import time
     import tracemalloc
     import cProfile
     import pstats
+
     #tracemalloc.start()
     start_time = time.time()
     profiler = cProfile.Profile()
     profiler.enable()
-    main()
+    fire.Fire(main)
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats('cumtime')
     #stats.print_stats(30)  # Print the top 10 functions by cumulative time

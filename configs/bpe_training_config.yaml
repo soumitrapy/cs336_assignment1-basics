@@ -1,0 +1,11 @@
+#input_path: "data/sample.txt"
+#input_path: "data/TinyStoriesV2-GPT4-train-10k.txt"
+input_path: "data/TinyStoriesV2-GPT4-train.txt"
+#input_path: "data/TinyStoriesV2-GPT4-valid.txt"
+#input_path: "data/owt_train.txt"
+vocab_size: 10000
+special_tokens: ["<|endoftext|>"] #, "<|unknown|>"]
+split_special_token: "<|endoftext|>"
+desired_num_chunks: 24
+pretokenization_pattern: r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+save_path: "checkpoints/bpe_tinystories.pkl"
