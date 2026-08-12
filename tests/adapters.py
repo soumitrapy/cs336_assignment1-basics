@@ -594,7 +594,7 @@ def run_train_bpe(
     vocab, merges = train_bpe(
         input_path=input_path,
         vocab_size=vocab_size,
-        special_tokens=[token.encode("utf-8") for token in special_tokens],
+        special_tokens=special_tokens,
         **kwargs,
     )
     return vocab, merges
