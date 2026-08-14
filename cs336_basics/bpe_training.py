@@ -3,32 +3,38 @@ from typing import BinaryIO
 from multiprocessing import Pool
 from tqdm import tqdm
 import heapq
-from dataclasses import dataclass
 
 from .utils.tokenization_utils import find_chunk_boundaries, save_vocab_and_merges
 
-@dataclass
 class Pretoken:
-    value: tuple[bytes, ...]
-    freq: int
+    def __init__(self, value: tuple[int, ...], freq: int):
+        self.value = value
+        self.freq = freq
 
-    def _search_pair(self, pair: tuple[bytes, bytes]) -> int:
+    def _search_pair(self, pair: tuple[int, int]) -> list[int]:
+        idx = []
+        prev = -3
         for i in range(len(self.value) - 1):
-            if (self.value[i], self.value[i + 1]) == pair:
-                return i
-        return -1
+            if (self.value[i], self.value[i + 1]) == pair and i-1 != prev:
+                idx.append(i)
+                prev = i
+        return idx
 
-    def _merge(self, pair: tuple[bytes, bytes], idx: int | None = None) -> bool:
-        if idx is None:
-            assert pair is not None, "Either pair or idx must be provided"
-            idx = self._search_pair(pair)
-        if idx < 0:
+    def _merge(self, pair: tuple[int, int], merged_token: int) -> bool:
+        idx = self._search_pair(pair)
+        if len(idx) == 0:
             return False
-        assert pair == (self.value[idx], self.value[idx + 1]), "The pair at the given index does not match the provided pair"
-        merged = pair[0] + pair[1]
-        self.value = self.value[:idx] + (merged,) + self.value[idx + 2 :]
+        j = 0
+        newvalue: list[int] = []
+        while j < len(self.value):
+            if j in idx:
+                newvalue.append(merged_token)
+                j += 2
+            else:
+                newvalue.append(self.value[j])
+                j += 1
+        self.value = tuple(newvalue)
         return True
-
 
 def initialize_vocab(special_tokens: list[bytes]) -> dict[int, bytes]:
     vocab = {i: bytes([i]) for i in range(256)}  # Initialize with all bytes
@@ -41,18 +47,17 @@ def initialize_vocab(special_tokens: list[bytes]) -> dict[int, bytes]:
 
 def pretokenization_chunk(
     chunk: bytes,
-    special_tokens: list[bytes],
+    special_tokens_pattern: str,
     pretokenization_pattern: str,
-) -> dict[tuple[bytes, ...], int]:
+) -> dict[tuple[int, ...], int]:
 
-    special_tokens_pattern = b"|".join(re.escape(tok) for tok in special_tokens)
     docs = re.split(special_tokens_pattern, chunk)
 
     # Pretokenization
     pretokens = {}
     for doc in docs:
         for x in re.finditer(pretokenization_pattern.encode("utf-8"), doc):
-            pretoken = tuple(bytes([b]) for b in x.group(0))
+            pretoken = tuple(x.group(0))
             pretokens[pretoken] = pretokens.get(pretoken, 0) + 1
     return pretokens
 
@@ -70,18 +75,20 @@ def pretokenization(
         file.seek(start)
         chunk = file.read(end - start)
         chunks.append(chunk)
+    special_tokens_pattern = b"|".join(re.escape(tok) for tok in special_tokens)
     with Pool(processes=num_chunks) as pool:
-        results = pool.starmap(pretokenization_chunk, [(chunk, special_tokens, pretokenization_pattern) for chunk in chunks])
+        results = pool.starmap(pretokenization_chunk, [(chunk, special_tokens_pattern, pretokenization_pattern) for chunk in chunks])
     pretokens = []
     for result in results:
         for pretoken, freq in result.items():
             pretokens.append(Pretoken(value=pretoken, freq=freq))
     return pretokens
 
-@dataclass(frozen=True)
+
 class Pair:
-    pair: tuple[bytes, bytes]
-    freq: int
+    def __init__(self, pair: tuple[int, int], freq: int):
+        self.pair = pair
+        self.freq = freq
 
     def __lt__(self, other: "Pair") -> bool:
         if self.freq == other.freq:
@@ -92,24 +99,26 @@ class Pair:
 def single_merge(
     pretokens: list[Pretoken],
     heap: list[Pair],
-    pair_counts: dict[tuple[bytes, bytes], int],
-    pair2ids: dict[tuple[bytes, bytes], set[int]],
+    pair_counts: dict[tuple[int, int], int],
+    pair2ids: dict[tuple[int, int], set[int]],
     id2pretoken: dict[int, Pretoken],
     vocab: dict[int, bytes],
-    merges: list[tuple[bytes, bytes]],
-) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-    topPair = heapq.heappop(heap)
-    # lazy invalidation: if most_frequent_pair is a stale pair ignore it and pop the next one
-    while topPair.pair not in pair_counts or topPair.freq != pair_counts[topPair.pair]:
-        if len(heap) == 0:
-            print("All pairs have been merged. Total vocabulary size {}.".format(len(vocab)))
-            return vocab, merges
-        topPair = heapq.heappop(heap)
+    merges: list[tuple[int, int]],
+) -> tuple[dict[int, bytes], list[tuple[int, int]]]:
+    topPair = None
+    while heap:
+        candidate = heapq.heappop(heap)
+        if pair_counts.get(candidate.pair, 0) == candidate.freq:
+            topPair = candidate
+            break
+    if topPair is None:
+        print("All pairs have been merged. Total vocabulary size {}.".format(len(vocab)))
+        return vocab, merges
 
     top = topPair.pair
-    new_token = top[0] + top[1]
+    new_token = len(vocab)
     merges.append(top)
-    vocab[len(vocab)] = new_token
+    vocab[new_token] = vocab[top[0]] + vocab[top[1]]
 
     # Updates
     #pair_counts.pop(top)
@@ -134,11 +143,7 @@ def single_merge(
             #     pair_counts.pop(pair)
                 #pair2ids.pop(pair)
             
-
-        idx = pretoken._search_pair(top)
-        while idx != -1:
-            pretoken._merge(top, idx)
-            idx = pretoken._search_pair(top)
+        pretoken._merge(pair=top, merged_token=new_token)
         for i in range(len(pretoken.value) - 1):
             pair = (pretoken.value[i], pretoken.value[i + 1])
             new_pairs[pair] = new_pairs.get(pair, 0) + pretoken.freq
@@ -176,10 +181,10 @@ def single_merge(
 def merging(pretokens: list[Pretoken],
             vocab: dict[int, bytes], 
             vocab_size: int,
-            merges: list[tuple[bytes, bytes]] | None = None) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+            merges: list[tuple[int, int]] | None = None) -> tuple[dict[int, bytes], list[tuple[int, int]]]:
     merges = [] if merges is None else merges
-    pair_counts = {}            # count of pairs across all pretokens
-    pair2ids = {}               # a mapping from pairs to the pretokens that contain them
+    pair_counts: dict[tuple[int, int], int] = {}
+    pair2ids: dict[tuple[int, int], set[int]] = {}
     id2pretoken = {i: pretoken for i, pretoken in enumerate(pretokens)}
     # initialization
     for id, pretoken in id2pretoken.items():
@@ -193,19 +198,15 @@ def merging(pretokens: list[Pretoken],
     
     heap = [Pair(pair, freq) for pair, freq in pair_counts.items()]
     heapq.heapify(heap)
-    print(len(heap), len(pair_counts), len(pair2ids))
-    i = 0
     with tqdm(total=vocab_size - len(vocab), desc="Merging pairs...") as pbar:
         while len(vocab) < vocab_size:
             if len(pair_counts) == 0:
                 print(f"All pairs have been merged. Total vocabulary size {len(vocab)}.")
                 break
             vocab, merges = single_merge(pretokens, heap, pair_counts, pair2ids, id2pretoken, vocab, merges)
-            # i += 1
-            # if i>=10:
-            #     break
-            # if pbar.n % 100 == 0:
-            #     pbar.update(1)
+            if len(heap)>4*len(pair_counts):
+                heap = [Pair(pair, freq) for pair, freq in pair_counts.items()]
+                heapq.heapify(heap)
             pbar.update(1)
     return vocab, merges
 
@@ -236,7 +237,8 @@ def train_bpe(
         )
 
     # Merging
-    vocab, merges = merging(pretokens=pretokens, vocab=vocab, vocab_size=vocab_size, merges=None)
+    vocab, merge_ids = merging(pretokens=pretokens, vocab=vocab, vocab_size=vocab_size, merges=None)
+    merges = [(vocab[left], vocab[right]) for left, right in merge_ids]
     if vocab_path and merges_path:
         save_vocab_and_merges(vocab=vocab, merges=merges, vocab_path=vocab_path, merges_path=merges_path)
 
