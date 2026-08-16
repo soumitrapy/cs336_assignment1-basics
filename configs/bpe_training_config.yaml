@@ -1,18 +1,16 @@
 #input_path: "data/sample.txt"
-input_path: "data/TinyStoriesV2-GPT4-train-10k.txt"
-#input_path: "data/TinyStoriesV2-GPT4-train.txt"
-#input_path: "data/TinyStoriesV2-GPT4-valid.txt"
-#input_path: "data/owt_train.txt"
+# input_path: "data/TinyStoriesV2-GPT4-train-100k.txt"
+# vocab_size: 1000
+input_path: "data/TinyStoriesV2-GPT4-train.txt"
 vocab_size: 10000
-#vocab_size: 32000
+vocab_path: "checkpoints/tinystories_vocab.json"
+merges_path: "checkpoints/tinystories_merges.txt"
+#input_path: "data/TinyStoriesV2-GPT4-valid.txt"
+# input_path: "data/owt_train.txt"
+# vocab_size: 32000
+# vocab_path: "checkpoints/owt_vocab.json"
+# merges_path: "checkpoints/owt_merges.txt"
 special_tokens: ["<|endoftext|>"] #, "<|unknown|>"]
 split_token: "<|endoftext|>"
-num_chunks: 12
+num_chunks: 2
 pretokenization_pattern: r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-#output_path: "checkpoints"
-#output_path: "checkpoints/bpe_tinystories.pkl"
-#output_path:
-#vocab_path: "checkpoints/tinystories_vocab.json"
-#merges_path: "checkpoints/tinystories_merges.txt"
-vocab_path: "checkpoints/owt_vocab.json"
-merges_path: "checkpoints/owt_merges.txt"

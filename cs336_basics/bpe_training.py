@@ -1,6 +1,6 @@
 import regex as re
 from typing import BinaryIO
-from multiprocessing import Pool
+from multiprocessing import get_context
 from tqdm import tqdm
 import heapq
 
@@ -37,12 +37,10 @@ class Pretoken:
         return True
 
 def initialize_vocab(special_tokens: list[bytes]) -> dict[int, bytes]:
-    vocab = {i: bytes([i]) for i in range(256)}  # Initialize with all bytes
-    count = 256
-    # Adding special tokens to the vocabulary
+    vocab = {i: bytes([i]) for i in range(256)}
     for token in special_tokens:
-        vocab[count] = token
-        count += 1
+        if token not in vocab.values():
+            vocab[len(vocab)] = token
     return vocab
 
 def pretokenization_chunk(
@@ -76,7 +74,8 @@ def pretokenization(
         chunk = file.read(end - start)
         chunks.append(chunk)
     special_tokens_pattern = b"|".join(re.escape(tok) for tok in special_tokens)
-    with Pool(processes=num_chunks) as pool:
+    ctx = get_context("spawn")
+    with ctx.Pool(processes=num_chunks) as pool:
         results = pool.starmap(pretokenization_chunk, [(chunk, special_tokens_pattern, pretokenization_pattern) for chunk in chunks])
     pretokens = []
     for result in results:
@@ -86,13 +85,15 @@ def pretokenization(
 
 
 class Pair:
-    def __init__(self, pair: tuple[int, int], freq: int):
+    __slots__ = ["pair", "freq", "byte_vals"]
+    def __init__(self, pair: tuple[int, int], freq: int, byte_vals: tuple[bytes, bytes]):
         self.pair = pair
         self.freq = freq
+        self.byte_vals = byte_vals
 
     def __lt__(self, other: "Pair") -> bool:
         if self.freq == other.freq:
-            return self.pair > other.pair  # For deterministic behavior
+            return self.byte_vals > other.byte_vals  # For deterministic behavior
         return self.freq > other.freq  # For max-heap behavior
 
 
@@ -103,8 +104,8 @@ def single_merge(
     pair2ids: dict[tuple[int, int], set[int]],
     id2pretoken: dict[int, Pretoken],
     vocab: dict[int, bytes],
-    merges: list[tuple[int, int]],
-) -> tuple[dict[int, bytes], list[tuple[int, int]]]:
+    merges: list[tuple[bytes, bytes]],
+) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     topPair = None
     while heap:
         candidate = heapq.heappop(heap)
@@ -116,9 +117,10 @@ def single_merge(
         return vocab, merges
 
     top = topPair.pair
+    byte_vals = topPair.byte_vals
     new_token = len(vocab)
-    merges.append(top)
-    vocab[new_token] = vocab[top[0]] + vocab[top[1]]
+    merges.append(byte_vals)
+    vocab[new_token] = byte_vals[0] + byte_vals[1]
 
     # Updates
     #pair_counts.pop(top)
@@ -174,14 +176,14 @@ def single_merge(
     assert top not in pair_counts, f"pair_counts[top]={pair_counts[top]}"
     for pair in updated_pairs:
         if pair_counts.get(pair, 0) > 0:
-            heapq.heappush(heap, Pair(pair, pair_counts[pair]))
+            heapq.heappush(heap, Pair(pair, pair_counts[pair], (vocab[pair[0]], vocab[pair[1]])))
     return vocab, merges
 
 
 def merging(pretokens: list[Pretoken],
             vocab: dict[int, bytes], 
             vocab_size: int,
-            merges: list[tuple[int, int]] | None = None) -> tuple[dict[int, bytes], list[tuple[int, int]]]:
+            merges: list[tuple[bytes, bytes]] | None = None) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     merges = [] if merges is None else merges
     pair_counts: dict[tuple[int, int], int] = {}
     pair2ids: dict[tuple[int, int], set[int]] = {}
@@ -196,7 +198,7 @@ def merging(pretokens: list[Pretoken],
                 pair2ids[pair] = set()
             pair2ids[pair].add(id)
     
-    heap = [Pair(pair, freq) for pair, freq in pair_counts.items()]
+    heap = [Pair(pair, freq, (vocab[pair[0]], vocab[pair[1]])) for pair, freq in pair_counts.items()]
     heapq.heapify(heap)
     with tqdm(total=vocab_size - len(vocab), desc="Merging pairs...") as pbar:
         while len(vocab) < vocab_size:
@@ -205,7 +207,7 @@ def merging(pretokens: list[Pretoken],
                 break
             vocab, merges = single_merge(pretokens, heap, pair_counts, pair2ids, id2pretoken, vocab, merges)
             if len(heap)>4*len(pair_counts):
-                heap = [Pair(pair, freq) for pair, freq in pair_counts.items()]
+                heap = [Pair(pair, freq, (vocab[pair[0]], vocab[pair[1]])) for pair, freq in pair_counts.items()]
                 heapq.heapify(heap)
             pbar.update(1)
     return vocab, merges
@@ -237,8 +239,8 @@ def train_bpe(
         )
 
     # Merging
-    vocab, merge_ids = merging(pretokens=pretokens, vocab=vocab, vocab_size=vocab_size, merges=None)
-    merges = [(vocab[left], vocab[right]) for left, right in merge_ids]
+    vocab, merges = merging(pretokens=pretokens, vocab=vocab, vocab_size=vocab_size, merges=None)
+    #merges = [(vocab[left], vocab[right]) for left, right in merges]
     if vocab_path and merges_path:
         save_vocab_and_merges(vocab=vocab, merges=merges, vocab_path=vocab_path, merges_path=merges_path)
 
@@ -267,7 +269,7 @@ if __name__ == "__main__":
     fire.Fire(main)
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats('cumtime')
-    stats.print_stats(30)  # Print the top 10 functions by cumulative time
+    #stats.print_stats(30)  # Print the top 10 functions by cumulative time
     end_time = time.time()
     #current, peak = tracemalloc.get_traced_memory()
     print(f"Time taken: {end_time - start_time} seconds")
