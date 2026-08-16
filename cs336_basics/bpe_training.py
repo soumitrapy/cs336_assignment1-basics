@@ -1,11 +1,12 @@
 from asyncio import tasks
 import gzip
-import regex as re
+from collections import Counter
 from typing import BinaryIO
 from multiprocessing import get_context
 from functools import partial
 from tqdm import tqdm
 import heapq
+import regex as re
 
 from .utils.tokenization_utils import find_chunk_boundaries, save_vocab_and_merges
 
@@ -49,9 +50,9 @@ def initialize_vocab(special_tokens: list[bytes]) -> dict[int, bytes]:
 def pretokenization_chunk(
     boundary: tuple[int, int],
     input_path: str,
-    special_tokens_pattern: str,
-    pretokenization_pattern: str,
-) -> dict[tuple[int, ...], int]:
+    special_tokens_pattern: bytes,
+    pretokenization_pattern: bytes,
+) -> dict[bytes, int]:
     start, end = boundary
     if str(input_path).endswith(".gz"):
         with gzip.open(input_path, "rb") as file:
@@ -61,22 +62,22 @@ def pretokenization_chunk(
         with open(input_path, "rb") as file:
             file.seek(start)
             chunk = file.read(end - start)
-    docs = re.split(special_tokens_pattern, chunk)
 
-    # Pretokenization
-    pretokens = {}
+    docs = re.split(special_tokens_pattern, chunk)
+    regex_pattern = re.compile(pretokenization_pattern)
+    pretokens: Counter[bytes] = Counter()
     for doc in docs:
-        for x in re.finditer(pretokenization_pattern.encode("utf-8"), doc):
-            pretoken = tuple(x.group(0))
-            pretokens[pretoken] = pretokens.get(pretoken, 0) + 1
-    return pretokens
+        for match in regex_pattern.finditer(doc):
+            pretokens[match.group(0)] += 1
+    return dict(pretokens)
+
 
 def pretokenization(
     input_path: str | None = None,
     num_chunks: int = 1,
     special_tokens: list[bytes] = [b"<|endoftext|>", b"<|unknown|>"],
     split_token: bytes = b"<|endoftext|>",
-    pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
+    pretokenization_pattern: bytes = br"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
 ) -> list[Pretoken]:
     if str(input_path).endswith(".gz"):
         with gzip.open(input_path, "rb") as file:
@@ -84,16 +85,27 @@ def pretokenization(
     else:
         with open(input_path, "rb") as file:
             boundaries = find_chunk_boundaries(file=file, num_chunks=num_chunks, split_token=split_token)
+
     special_tokens_pattern = b"|".join(re.escape(tok) for tok in special_tokens)
-    pretokens = {}
-    ctx = get_context("spawn")
-    pretokenization_func = partial(pretokenization_chunk, input_path=input_path, special_tokens_pattern=special_tokens_pattern, pretokenization_pattern=pretokenization_pattern)
+    pretokens: Counter[bytes] = Counter()
+
+    try:
+        ctx = get_context("fork")
+    except ValueError:
+        ctx = get_context("spawn")
+
+    pretokenization_func = partial(
+        pretokenization_chunk,
+        input_path=input_path,
+        special_tokens_pattern=special_tokens_pattern,
+        pretokenization_pattern=pretokenization_pattern,
+    )
     with ctx.Pool(processes=num_chunks) as pool:
         for result in pool.imap_unordered(pretokenization_func, boundaries):
             for pretoken, freq in result.items():
-                pretokens[pretoken] = pretokens.get(pretoken, 0) + freq
+                pretokens[pretoken] += freq
 
-    final_pretokens = [Pretoken(value=pretoken, freq=freq) for pretoken, freq in pretokens.items()]
+    final_pretokens = [Pretoken(value=tuple(pretoken), freq=freq) for pretoken, freq in pretokens.items()]
     return final_pretokens
     # ctx = get_context("spawn")
     # with ctx.Pool(processes=num_chunks) as pool:
@@ -246,6 +258,7 @@ def train_bpe(
     # initialize vocabulary with all bytes and special tokens
     special_tokens = [tok.encode("utf-8") for tok in special_tokens]
     split_token = split_token.encode("utf-8")
+    pretokenization_pattern = pretokenization_pattern.encode("utf-8")
     vocab = initialize_vocab(special_tokens)
 
     # pretokenization
