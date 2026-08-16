@@ -1,7 +1,9 @@
+from asyncio import tasks
 import gzip
 import regex as re
 from typing import BinaryIO
 from multiprocessing import get_context
+from functools import partial
 from tqdm import tqdm
 import heapq
 
@@ -75,14 +77,24 @@ def pretokenization(
         chunk = file.read(end - start)
         chunks.append(chunk)
     special_tokens_pattern = b"|".join(re.escape(tok) for tok in special_tokens)
+    pretokens = {}
     ctx = get_context("spawn")
+    pretokenization_func = partial(pretokenization_chunk, special_tokens_pattern=special_tokens_pattern, pretokenization_pattern=pretokenization_pattern)
     with ctx.Pool(processes=num_chunks) as pool:
-        results = pool.starmap(pretokenization_chunk, [(chunk, special_tokens_pattern, pretokenization_pattern) for chunk in chunks])
-    pretokens = []
-    for result in results:
-        for pretoken, freq in result.items():
-            pretokens.append(Pretoken(value=pretoken, freq=freq))
-    return pretokens
+        for result in pool.imap_unordered(pretokenization_func, chunks):
+            for pretoken, freq in result.items():
+                pretokens[pretoken] = pretokens.get(pretoken, 0) + freq
+
+    final_pretokens = [Pretoken(value=pretoken, freq=freq) for pretoken, freq in pretokens.items()]
+    return final_pretokens
+    # ctx = get_context("spawn")
+    # with ctx.Pool(processes=num_chunks) as pool:
+    #     results = pool.starmap(pretokenization_chunk, [(chunk, special_tokens_pattern, pretokenization_pattern) for chunk in chunks])
+    # pretokens = []
+    # for result in results:
+    #     for pretoken, freq in result.items():
+    #         pretokens.append(Pretoken(value=pretoken, freq=freq))
+    # return pretokens
 
 
 class Pair:
@@ -218,7 +230,7 @@ def train_bpe(
         vocab_size: int = 10000,
         special_tokens: list[str] = ["<|endoftext|>", "<|unknown|>"],
         split_token: str = "<|endoftext|>",
-        num_chunks: int = 12,
+        num_chunks: int = 4,
         pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
         vocab_path: str = None,
         merges_path: str = None,
@@ -230,7 +242,7 @@ def train_bpe(
 
     # pretokenization
     print(f"Pretokenizing with {num_chunks} chunk(s)...")
-    if input_path.endswith(".gz"):
+    if isinstance(input_path, str) and input_path.endswith(".gz"):
         with gzip.open(input_path, "rb") as file:
             pretokens = pretokenization(
                 file=file,

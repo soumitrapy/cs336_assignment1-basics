@@ -1,10 +1,12 @@
 #input_path: "data/sample.txt"
-# input_path: "data/TinyStoriesV2-GPT4-train-100k.txt"
-# vocab_size: 1000
-input_path: "data/TinyStoriesV2-GPT4-train.txt"
-vocab_size: 10000
-vocab_path: "checkpoints/tinystories_vocab.json"
-merges_path: "checkpoints/tinystories_merges.txt"
+input_path: "data/TinyStoriesV2-GPT4-train-10k.txt"
+vocab_size: 1000
+vocab_path: "checkpoints/tinystories10k_vocab.json"
+merges_path: "checkpoints/tinystories10k_merges.txt"
+# input_path: "data/TinyStoriesV2-GPT4-train.txt"
+# vocab_size: 10000
+# vocab_path: "checkpoints/tinystories_vocab.json"
+# merges_path: "checkpoints/tinystories_merges.txt"
 #input_path: "data/TinyStoriesV2-GPT4-valid.txt"
 # input_path: "data/owt_train.txt"
 # vocab_size: 32000
