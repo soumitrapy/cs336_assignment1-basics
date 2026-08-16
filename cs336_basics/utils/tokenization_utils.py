@@ -75,7 +75,9 @@ def find_chunk_boundaries(
             initial_position += mini_chunk_size
 
     # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
-    return sorted(set(chunk_boundaries))
+    chunk_boundaries = sorted(set(chunk_boundaries))
+    boundaries = [(chunk_boundaries[i], chunk_boundaries[i + 1]) for i in range(len(chunk_boundaries) - 1)]
+    return boundaries
 
 def save_vocab_and_merges(vocab: dict[int, bytes],
                           merges: list[tuple[bytes, bytes]], 

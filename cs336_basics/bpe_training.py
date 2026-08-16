@@ -47,11 +47,20 @@ def initialize_vocab(special_tokens: list[bytes]) -> dict[int, bytes]:
     return vocab
 
 def pretokenization_chunk(
-    chunk: bytes,
+    boundary: tuple[int, int],
+    input_path: str,
     special_tokens_pattern: str,
     pretokenization_pattern: str,
 ) -> dict[tuple[int, ...], int]:
-
+    start, end = boundary
+    if str(input_path).endswith(".gz"):
+        with gzip.open(input_path, "rb") as file:
+            file.seek(start)
+            chunk = file.read(end - start)
+    else:
+        with open(input_path, "rb") as file:
+            file.seek(start)
+            chunk = file.read(end - start)
     docs = re.split(special_tokens_pattern, chunk)
 
     # Pretokenization
@@ -63,25 +72,24 @@ def pretokenization_chunk(
     return pretokens
 
 def pretokenization(
-    file: BinaryIO,
+    input_path: str | None = None,
     num_chunks: int = 1,
     special_tokens: list[bytes] = [b"<|endoftext|>", b"<|unknown|>"],
     split_token: bytes = b"<|endoftext|>",
     pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
 ) -> list[Pretoken]:
-    boundaries = find_chunk_boundaries(file=file, num_chunks=num_chunks, split_token=split_token)
-    chunks = []
-    for i in range(len(boundaries) - 1):
-        start, end = boundaries[i], boundaries[i + 1]
-        file.seek(start)
-        chunk = file.read(end - start)
-        chunks.append(chunk)
+    if str(input_path).endswith(".gz"):
+        with gzip.open(input_path, "rb") as file:
+            boundaries = find_chunk_boundaries(file=file, num_chunks=num_chunks, split_token=split_token)
+    else:
+        with open(input_path, "rb") as file:
+            boundaries = find_chunk_boundaries(file=file, num_chunks=num_chunks, split_token=split_token)
     special_tokens_pattern = b"|".join(re.escape(tok) for tok in special_tokens)
     pretokens = {}
     ctx = get_context("spawn")
-    pretokenization_func = partial(pretokenization_chunk, special_tokens_pattern=special_tokens_pattern, pretokenization_pattern=pretokenization_pattern)
+    pretokenization_func = partial(pretokenization_chunk, input_path=input_path, special_tokens_pattern=special_tokens_pattern, pretokenization_pattern=pretokenization_pattern)
     with ctx.Pool(processes=num_chunks) as pool:
-        for result in pool.imap_unordered(pretokenization_func, chunks):
+        for result in pool.imap_unordered(pretokenization_func, boundaries):
             for pretoken, freq in result.items():
                 pretokens[pretoken] = pretokens.get(pretoken, 0) + freq
 
@@ -242,24 +250,13 @@ def train_bpe(
 
     # pretokenization
     print(f"Pretokenizing with {num_chunks} chunk(s)...")
-    if isinstance(input_path, str) and input_path.endswith(".gz"):
-        with gzip.open(input_path, "rb") as file:
-            pretokens = pretokenization(
-                file=file,
-                num_chunks=num_chunks,
-                special_tokens=special_tokens,
-                split_token=split_token,
-                pretokenization_pattern=pretokenization_pattern,
-            )
-    else:
-        with open(input_path, "rb") as file:
-            pretokens = pretokenization(
-                file=file,
-                num_chunks=num_chunks,
-                special_tokens=special_tokens,
-                split_token=split_token,
-                pretokenization_pattern=pretokenization_pattern,
-            )
+    pretokens = pretokenization(
+        input_path=input_path,
+        num_chunks=num_chunks,
+        special_tokens=special_tokens,
+        split_token=split_token,
+        pretokenization_pattern=pretokenization_pattern,
+    )
 
     # Merging
     vocab, merges = merging(pretokens=pretokens, vocab=vocab, vocab_size=vocab_size, merges=None)
