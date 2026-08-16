@@ -81,6 +81,8 @@ def save_vocab_and_merges(vocab: dict[int, bytes],
                           merges: list[tuple[bytes, bytes]], 
                           vocab_path: str, 
                           merges_path: str) -> None:
+    os.makedirs(os.path.dirname(vocab_path), exist_ok=True)
+    os.makedirs(os.path.dirname(merges_path), exist_ok=True)
     with open(vocab_path, "w", encoding="utf-8") as f:
         json.dump({str(k): v.hex() for k, v in vocab.items()}, f, indent=2)
     with open(merges_path, "w", encoding="utf-8") as f:

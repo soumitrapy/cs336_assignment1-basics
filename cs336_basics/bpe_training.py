@@ -1,3 +1,4 @@
+import gzip
 import regex as re
 from typing import BinaryIO
 from multiprocessing import get_context
@@ -229,14 +230,24 @@ def train_bpe(
 
     # pretokenization
     print(f"Pretokenizing with {num_chunks} chunk(s)...")
-    with open(input_path, "rb") as file:
-        pretokens = pretokenization(
-            file=file,
-            num_chunks=num_chunks,
-            special_tokens=special_tokens,
-            split_token=split_token,
-            pretokenization_pattern=pretokenization_pattern,
-        )
+    if input_path.endswith(".gz"):
+        with gzip.open(input_path, "rb") as file:
+            pretokens = pretokenization(
+                file=file,
+                num_chunks=num_chunks,
+                special_tokens=special_tokens,
+                split_token=split_token,
+                pretokenization_pattern=pretokenization_pattern,
+            )
+    else:
+        with open(input_path, "rb") as file:
+            pretokens = pretokenization(
+                file=file,
+                num_chunks=num_chunks,
+                special_tokens=special_tokens,
+                split_token=split_token,
+                pretokenization_pattern=pretokenization_pattern,
+            )
 
     # Merging
     vocab, merges = merging(pretokens=pretokens, vocab=vocab, vocab_size=vocab_size, merges=None)
