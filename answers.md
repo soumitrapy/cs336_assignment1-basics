@@ -12,3 +12,7 @@
 - a. Time: 182 sec (don't use tracemalloc during time computation), Memory: 28 MB (peak)
 longest token in vocab: b' accomplishment'
 - b. Merging is taking much time.
+
+# Problem (train_bpe_expts_owt): BPE Training on OpenWebText (2 points)
+- a. longest token: 'ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ'
+- b. a lot of new tokens are added.
