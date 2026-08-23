@@ -2,7 +2,11 @@ import os
 from typing import BinaryIO
 import json
 
+def create_chunks(text: str, chunk_size: int, split_token: str) -> list[str]:
+    chunk_boundaries = []
+    mini_chunk_size = 4096  # Read ahead by 4k bytes at a time
 
+    
 def find_chunk_boundaries(
     file: BinaryIO,
     split_token: bytes,
