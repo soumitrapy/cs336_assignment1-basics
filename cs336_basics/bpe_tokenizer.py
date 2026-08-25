@@ -14,8 +14,9 @@ class BPETokenizer:
         ) -> None:
         self.vocab = vocab
         self.merges = merges
-        self.special_tokens = special_tokens
-        self.pretokenization_pattern = pretokenization_pattern
+        self.special_tokens = sorted(special_tokens, key=len, reverse=True) if special_tokens is not None else None
+        self.special_tokens_pattern = re.compile("|".join(re.escape(token) for token in self.special_tokens)) if self.special_tokens is not None else None
+        self.pretokenization_pattern = re.compile(pretokenization_pattern)
         self.bytestoid = {v: k for k, v in vocab.items()}
         #self.merges_ids = [(self.bytestoid[a], self.bytestoid[b]) for a, b in merges]
 
@@ -29,25 +30,8 @@ class BPETokenizer:
         vocab, merges = load_vocab_and_merges(vocab_path=vocab_filepath, merges_path=merges_filepath)
         return cls(vocab=vocab, merges=merges, special_tokens=special_tokens, pretokenization_pattern=pretokenization_pattern)
 
-    def pretokenize(self, text: str) -> Iterator[str]:
-        if self.special_tokens:
-            special_tokens_pattern = "(" + "|".join(re.escape(token) for token in sorted(self.special_tokens, reverse=True)) + ")"
-            for part in re.split(special_tokens_pattern, text):
-                if not part:
-                    continue
-                if part in self.special_tokens:
-                    yield part
-                else:
-
-                    for match in re.finditer(self.pretokenization_pattern, part):
-                        yield match.group(0)
-        else:
-
-            for match in re.finditer(self.pretokenization_pattern, text):
-                yield match.group(0)
-
-
-    def merge(self, pretoken: str) -> list[int]:
+    
+    def _bpe(self, pretoken: str) -> Iterator[int]:
         pretoken_bytes = [bytes([b]) for b in pretoken.encode("utf-8")]
         for pair in self.merges:
             new_bytes = []
@@ -60,31 +44,53 @@ class BPETokenizer:
                     new_bytes.append(pretoken_bytes[i])
                     i += 1
             pretoken_bytes = new_bytes
-        return [self.bytestoid[b] for b in pretoken_bytes]
+        for b in pretoken_bytes:
+            yield self.bytestoid[b]
+
+    def _encode_normal_text(self, text: str) -> Iterator[int]:
+        for match in self.pretokenization_pattern.finditer(text):
+            pretoken = match.group(0)
+            yield from self._bpe(pretoken)
 
     def encode(self, text: str) -> list[int]:
-        
-
-
-
-        return list(self.encode_generator(text))
-
-    def encode_generator(self, text: str) -> Iterator[int]:
-        for pretoken in self.pretokenize(text):
-            if self.special_tokens and pretoken in self.special_tokens:
-
-                yield self.bytestoid[pretoken.encode("utf-8")]
-            else:
-
-
-                yield from self.merge(pretoken)
+        output_ids = []
+        if self.special_tokens_pattern is None:
+            output_ids.extend(self._encode_normal_text(text))
+        else:
+            last_end = 0
+            for match in self.special_tokens_pattern.finditer(text):
+                start, end = match.span()
+                normal_text = text[last_end:start]
+                if normal_text:
+                    output_ids.extend(self._encode_normal_text(normal_text))
+                special_token = match.group(0)
+                output_ids.append(self.bytestoid[special_token.encode("utf-8")])
+                last_end = end
+            remaining_text = text[last_end:]
+            if remaining_text:
+                output_ids.extend(self._encode_normal_text(remaining_text))
+        return output_ids
 
     def encode_iterable(self, texts: Iterable[str]) -> Iterator[int]:
         for text in texts:
-
-            yield from self.encode_generator(text)
+            yield from self.encode(text)
 
     def decode(self, ids: list[int]) -> str:
         bytes_list = [self.vocab[i] for i in ids]
         return b"".join(bytes_list).decode("utf-8", errors="replace")
+
+
+    # def encode_file(self, file_path: str, chunk_size: int = 1024*1024*2) -> Iterator[int]:
+    #     with open(file_path, "r", encoding="utf-8") as f:
+    #         prev_boundary = 0
+    #         while True:
+    #             f.seek(prev_boundary)
+    #             boundary = self._found_safe_boundary(f, prev_boundary+chunk_size)
+    #             chunk = f.read(boundary - prev_boundary)
+    #             if not chunk:
+    #                 break
+
+    #             yield from self.encode(chunk)
+
+            
 

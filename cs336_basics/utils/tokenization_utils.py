@@ -1,18 +1,60 @@
 import os
 from typing import BinaryIO
+from io import BufferedReader
+import regex as re
 import json
 
-def create_chunks(text: str, chunk_size: int, split_token: str) -> list[str]:
-    chunk_boundaries = []
-    mini_chunk_size = 4096  # Read ahead by 4k bytes at a time
+# def find_chunk_boundaries_for_encoding(
+#         file: BufferedReader,
+#         pretokenization_pattern: str,
+#         special_tokens: list[str] | None = None,
+#         chunk_size: int = 1024 * 1024 * 2,
+#         mini_chunk_size: int = 1024
+# ) -> list[tuple[int, int]]:
+#     """
+#     Find safe chunk boundaries in a file for encoding.
+#     A safe boundary is defined as the end of a special token or the end of a pretoken.
+#     """
+#     boundaries = [] 
+#     prev_boundary = 0
+#     new_boundary = chunk_size
+#     while True:
+#         new_boundary += chunk_size
+#         end = None
+#         file.seek(new_boundary)
+#         mini_chunk = file.read(mini_chunk_size)
+#         if not mini_chunk:
+#             boundaries.append((prev_boundary, file.tell()))
+#             break
+#         if special_tokens:
+#             special_tokens_pattern = "|".join(re.escape(token) for token in sorted(special_tokens, reverse=True))
+#             special_tokens_pattern = re.compile(special_tokens_pattern)
+#             for match in special_tokens_pattern.finditer(mini_chunk):
+#                 end = match.end()
+#                 break
+#         if end is None:
+#             first = 0
+#             pretokenization_pattern = re.compile(pretokenization_pattern)
+#             for match in pretokenization_pattern.finditer(mini_chunk): # 2nd pretokens
+#                 first += 1
+#                 if first>1:
+#                     end = prev_end
+#                     break
+#                 prev_end = match.end()
+#         if end is None:
+#             new_boundary += mini_chunk_size
+#         else:
+#             boundaries.append((prev_boundary, new_boundary + end))
+#             prev_boundary = new_boundary + end
+#             new_boundary = new_boundary + end
+#     return boundaries
 
-    
 def find_chunk_boundaries(
     file: BinaryIO,
     split_token: bytes,
     num_chunks: int | None = None,
     chunk_size: int | None = None,
-) -> list[int]:
+) -> list[tuple[int, int]]:
     """
         Chunk the file into parts that can be counted independently.
         May return fewer chunks if the boundaries end up overlapping.
@@ -28,7 +70,6 @@ def find_chunk_boundaries(
                 chunk = f.read(end - start).decode("utf-8", errors="ignore")
                 # Run pre-tokenization on your chunk and store the counts for each pre-token
     """
-
     assert isinstance(
         split_token, bytes
     ), "Must represent special token as a bytestring"
