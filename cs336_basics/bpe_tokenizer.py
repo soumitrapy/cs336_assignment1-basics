@@ -52,45 +52,30 @@ class BPETokenizer:
             pretoken = match.group(0)
             yield from self._bpe(pretoken)
 
-    def encode(self, text: str) -> list[int]:
-        output_ids = []
+    def _encode(self, text: str) -> Iterator[int]:
         if self.special_tokens_pattern is None:
-            output_ids.extend(self._encode_normal_text(text))
+            yield from self._encode_normal_text(text)
         else:
             last_end = 0
             for match in self.special_tokens_pattern.finditer(text):
                 start, end = match.span()
                 normal_text = text[last_end:start]
                 if normal_text:
-                    output_ids.extend(self._encode_normal_text(normal_text))
+                    yield from self._encode_normal_text(normal_text)
                 special_token = match.group(0)
-                output_ids.append(self.bytestoid[special_token.encode("utf-8")])
+                yield self.bytestoid[special_token.encode("utf-8")]
                 last_end = end
             remaining_text = text[last_end:]
             if remaining_text:
-                output_ids.extend(self._encode_normal_text(remaining_text))
-        return output_ids
+                yield from self._encode_normal_text(remaining_text)
+
+    def encode(self, text: str) -> list[int]:
+        return list(self._encode(text))
 
     def encode_iterable(self, texts: Iterable[str]) -> Iterator[int]:
         for text in texts:
-            yield from self.encode(text)
+            yield from self._encode(text)
 
     def decode(self, ids: list[int]) -> str:
         bytes_list = [self.vocab[i] for i in ids]
         return b"".join(bytes_list).decode("utf-8", errors="replace")
-
-
-    # def encode_file(self, file_path: str, chunk_size: int = 1024*1024*2) -> Iterator[int]:
-    #     with open(file_path, "r", encoding="utf-8") as f:
-    #         prev_boundary = 0
-    #         while True:
-    #             f.seek(prev_boundary)
-    #             boundary = self._found_safe_boundary(f, prev_boundary+chunk_size)
-    #             chunk = f.read(boundary - prev_boundary)
-    #             if not chunk:
-    #                 break
-
-    #             yield from self.encode(chunk)
-
-            
-
