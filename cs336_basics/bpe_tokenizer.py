@@ -1,7 +1,8 @@
 import regex as re
 from typing import Iterable, Iterator
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
-from .utils.tokenization_utils import load_vocab_and_merges
+from .utils.tokenization_utils import load_vocab_and_merges, create_chunks
 
 class BPETokenizer:
 
@@ -15,8 +16,8 @@ class BPETokenizer:
         self.vocab = vocab
         self.merges = merges
         self.special_tokens = sorted(special_tokens, key=len, reverse=True) if special_tokens is not None else None
-        self.special_tokens_pattern = re.compile("|".join(re.escape(token) for token in self.special_tokens)) if self.special_tokens is not None else None
-        self.pretokenization_pattern = re.compile(pretokenization_pattern)
+        self.special_tokens_pattern = "|".join(re.escape(token) for token in self.special_tokens) if self.special_tokens is not None else None
+        self.pretokenization_pattern = pretokenization_pattern
         self.bytestoid = {v: k for k, v in vocab.items()}
         #self.merges_ids = [(self.bytestoid[a], self.bytestoid[b]) for a, b in merges]
 
@@ -48,7 +49,7 @@ class BPETokenizer:
             yield self.bytestoid[b]
 
     def _encode_normal_text(self, text: str) -> Iterator[int]:
-        for match in self.pretokenization_pattern.finditer(text):
+        for match in re.finditer(self.pretokenization_pattern, text):
             pretoken = match.group(0)
             yield from self._bpe(pretoken)
 
@@ -57,7 +58,7 @@ class BPETokenizer:
             yield from self._encode_normal_text(text)
         else:
             last_end = 0
-            for match in self.special_tokens_pattern.finditer(text):
+            for match in re.finditer(self.special_tokens_pattern, text):
                 start, end = match.span()
                 normal_text = text[last_end:start]
                 if normal_text:
@@ -72,9 +73,12 @@ class BPETokenizer:
     def encode(self, text: str) -> list[int]:
         return list(self._encode(text))
 
-    def encode_iterable(self, texts: Iterable[str]) -> Iterator[int]:
-        for text in texts:
-            yield from self._encode(text)
+    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4, chunk_size: int = 1024 * 1024) -> Iterator[int]:
+        chunks = create_chunks(file=texts, chunk_size = chunk_size, special_tokens=self.special_tokens, pretokenization_pattern=self.pretokenization_pattern)
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            for ids in executor.map(self.encode, chunks):
+                yield from ids
+            
 
     def decode(self, ids: list[int]) -> str:
         bytes_list = [self.vocab[i] for i in ids]

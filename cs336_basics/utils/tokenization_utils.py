@@ -1,59 +1,61 @@
 import os
-from typing import BinaryIO
-from io import BufferedReader
+from typing import BinaryIO, TextIO, Iterator
 import regex as re
 import json
 
-# def find_chunk_boundaries_for_encoding(
-#         file: BufferedReader,
-#         pretokenization_pattern: str,
-#         special_tokens: list[str] | None = None,
-#         chunk_size: int = 1024 * 1024 * 2,
-#         mini_chunk_size: int = 1024
-# ) -> list[tuple[int, int]]:
-#     """
-#     Find safe chunk boundaries in a file for encoding.
-#     A safe boundary is defined as the end of a special token or the end of a pretoken.
-#     """
-#     boundaries = [] 
-#     prev_boundary = 0
-#     new_boundary = chunk_size
-#     while True:
-#         new_boundary += chunk_size
-#         end = None
-#         file.seek(new_boundary)
-#         mini_chunk = file.read(mini_chunk_size)
-#         if not mini_chunk:
-#             boundaries.append((prev_boundary, file.tell()))
-#             break
-#         if special_tokens:
-#             special_tokens_pattern = "|".join(re.escape(token) for token in sorted(special_tokens, reverse=True))
-#             special_tokens_pattern = re.compile(special_tokens_pattern)
-#             for match in special_tokens_pattern.finditer(mini_chunk):
-#                 end = match.end()
-#                 break
-#         if end is None:
-#             first = 0
-#             pretokenization_pattern = re.compile(pretokenization_pattern)
-#             for match in pretokenization_pattern.finditer(mini_chunk): # 2nd pretokens
-#                 first += 1
-#                 if first>1:
-#                     end = prev_end
-#                     break
-#                 prev_end = match.end()
-#         if end is None:
-#             new_boundary += mini_chunk_size
-#         else:
-#             boundaries.append((prev_boundary, new_boundary + end))
-#             prev_boundary = new_boundary + end
-#             new_boundary = new_boundary + end
-#     return boundaries
+def create_chunks(
+        file: TextIO,
+        chunk_size: int = 1024 * 1024,
+        special_tokens: list[str] | None = None,
+        pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
+        mini_chunk_size: int = 4096
+) -> Iterator[str]:
+    file.seek(0)
+    max_special_token_length = max((len(token) for token in special_tokens)) if special_tokens else 0
+    special_tokens_pattern = re.compile("|".join(re.escape(token) for token in sorted(special_tokens, key=len, reverse=True))) if special_tokens else None
+    pretokenization_pattern = re.compile(pretokenization_pattern)
+    buffer = ""
+    while True:
+        buffer += file.read(chunk_size)
+        mini_chunk = ""
+        found = False
+        while not found:
+            new_chunk = file.read(mini_chunk_size)
+            if not new_chunk:
+                if buffer:
+                    yield buffer+mini_chunk
+                return
+            mini_chunk += new_chunk
+            found = False
+            if special_tokens_pattern is not None:
+                for match in special_tokens_pattern.finditer(mini_chunk):
+                    end = match.start()
+                    found = True
+                    yield buffer + mini_chunk[:end]
+                    buffer = mini_chunk[end:]
+                    mini_chunk = ""
+                    break
+            if not found:
+                first = True
+                for match in pretokenization_pattern.finditer(mini_chunk):
+                    if not first:
+                        end = match.start()
+                        if end>=max_special_token_length and end<=len(mini_chunk)-max_special_token_length:
+                            found = True
+                            yield buffer + mini_chunk[:end]
+                            buffer = mini_chunk[end:]
+                            mini_chunk = ""
+                            break
+                    else:
+                        first = False
+
 
 def find_chunk_boundaries(
     file: BinaryIO,
     split_token: bytes,
     num_chunks: int | None = None,
     chunk_size: int | None = None,
+    mini_chunk_size: int = 4096
 ) -> list[tuple[int, int]]:
     """
         Chunk the file into parts that can be counted independently.
