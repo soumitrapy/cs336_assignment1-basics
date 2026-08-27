@@ -16,3 +16,11 @@ longest token in vocab: b' accomplishment'
 # Problem (train_bpe_expts_owt): BPE Training on OpenWebText (2 points)
 - a. longest token: 'ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ'
 - b. a lot of new tokens are added.
+
+# Problem (tokenizer_experiments): Experiments with tokenizers (4 points)
+- a. Average compression ratio for TinyStories tokenizer: 4.11 bytes/token
+     Average compression ratio for owt tokenizer: 4.43 bytes/token
+- b. Average compression ratio for TinyStories tokenizer on owt data: 3.26 bytes/token. As tinystories tokenizer have not seen more general data set like owt, so the compression will be lower compared to the owt trained tokenizer.
+- c. Average throughput for owt tokenizer on owt data: 414148.82 bytes/second or 0.41 MB/second
+To process 852 GB data, it would take 571.45 hours
+- d.as uint16 can represent total 2^16 unsigned numbers. and my vocab has only 32k id, so it is sufficient for my use case.

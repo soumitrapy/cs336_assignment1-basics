@@ -104,10 +104,14 @@ class BPETokenizer:
     def encode(self, text: str) -> list[int]:
         return list(self._encode(text))
 
-    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4) -> Iterator[int]:
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            for ids in executor.map(self.encode, texts):
-                yield from ids
+    # def encode_iterable(self, texts: Iterable[str], num_workers: int = 4) -> Iterator[int]:
+    #     with ProcessPoolExecutor(max_workers=num_workers) as executor:
+    #         for ids in executor.map(self.encode, texts):
+    #             yield from ids
+
+    def encode_iterable(self, texts: Iterable[str]) -> Iterator[int]:
+        for text in texts:
+            yield from self.encode(text)
             
 
     def decode(self, ids: list[int]) -> str:
