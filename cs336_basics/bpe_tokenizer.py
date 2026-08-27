@@ -1,11 +1,11 @@
 import regex as re
 from typing import Iterable, Iterator
-from concurrent.futures import ProcessPoolExecutor
+#from concurrent.futures import ProcessPoolExecutor
+import warnings
 
 from .utils.tokenization_utils import load_vocab_and_merges
 
 class BPETokenizer:
-
     def __init__(
         self,
         vocab: dict[int, bytes],
@@ -15,11 +15,10 @@ class BPETokenizer:
         ) -> None:
         self.vocab = vocab
         self.merges = merges
-        self.bytestoid = {v: k for k, v in vocab.items()}
-        self.merge_ids = {(self.bytestoid[pair[0]], self.bytestoid[pair[1]]): self.bytestoid[pair[0]+pair[1]] for pair in self.merges}
-        self.merge_ranks = {(self.bytestoid[pair[0]], self.bytestoid[pair[1]]): i for i, pair in enumerate(self.merges)}
+        self.bytes2id = {v: k for k, v in vocab.items()}
+        self.merge_ranks = {(self.bytes2id[pair[0]], self.bytes2id[pair[1]]): (i, self.bytes2id[pair[0] + pair[1]]) for i, pair in enumerate(self.merges)}
         #
-        self.pretokenization_pattern = pretokenization_pattern
+        self.pretokenization_pattern = re.compile(pretokenization_pattern)
         self.special_tokens = None
         self.special_pattern = None
         self.sp2id = {}
@@ -29,14 +28,14 @@ class BPETokenizer:
             count = len(self.vocab)
             for token in self.special_tokens:
                 token_bytes = token.encode("utf-8")
-                if token_bytes in self.bytestoid:
-                    self.sp2id[token] = self.bytestoid[token_bytes]
-                    self.id2sp[self.bytestoid[token_bytes]] = token
+                if token_bytes in self.bytes2id:
+                    self.sp2id[token] = self.bytes2id[token_bytes]
+                    self.id2sp[self.bytes2id[token_bytes]] = token
                 else:
                     self.sp2id[token] = count
                     self.id2sp[count] = token
                     count += 1
-            self.special_pattern = "|".join(re.escape(token) for token in self.special_tokens)
+            self.special_pattern = re.compile("|".join(re.escape(token) for token in self.special_tokens))
     
     @classmethod
     def from_file(cls,
@@ -52,35 +51,36 @@ class BPETokenizer:
     def _bpe(self, pretoken: str) -> Iterator[int]:
         if not pretoken:
             return
-        ids = [self.bytestoid[bytes([b])] for b in pretoken.encode("utf-8")]
+        ids = [self.bytes2id[bytes([b])] for b in pretoken.encode("utf-8")]
+        pairs = set([(ids[i], ids[i + 1]) for i in range(len(ids) - 1)])
+        ranks = {pair: self.merge_ranks.get(pair, (float('inf'), None)) for pair in pairs} # locally store for faster access
+
         while len(ids) > 1:
-            # Find the best pair to merge
-            k = None
-            best_rank = float("inf")
-            for i in range(len(ids) - 1):
-                rank = self.merge_ranks.get((ids[i], ids[i + 1]), float("inf"))
-                if rank < best_rank:
-                    best_rank = rank
-                    #best_pair = (ids[i], ids[i + 1])
-                    k = i
-            if best_rank == float("inf"):
+            best_pair = min(pairs, key=lambda pair: ranks[pair][0], default=None)
+            if best_pair is None or ranks[best_pair][1] is None:
                 break
-            # Merge the best pair
-            new_id = self.merge_ids[(ids[k], ids[k + 1])]
-            new_ids = []
+            newids = []
+            _, merged_id = ranks[best_pair]
             i = 0
             while i < len(ids):
-                if i == k:
-                    new_ids.append(new_id)
-                    i += 2  # Skip the next one since it's merged
+                if i < len(ids) - 1 and (ids[i], ids[i + 1]) == best_pair:
+                    newids.append(merged_id)
+                    i += 2
                 else:
-                    new_ids.append(ids[i])
+                    newids.append(ids[i])
                     i += 1
-            ids = new_ids
+            pairs.clear()
+            for i in range(1, len(newids)):
+                pair = (newids[i - 1], newids[i])
+                pairs.add(pair)
+                if pair not in ranks:
+                    ranks[pair] = self.merge_ranks.get(pair, (float('inf'), None))
+
+            ids = newids
         yield from ids
 
     def _encode_normal_text(self, text: str) -> Iterator[int]:
-        for match in re.finditer(self.pretokenization_pattern, text):
+        for match in self.pretokenization_pattern.finditer(text):
             pretoken = match.group(0)
             yield from self._bpe(pretoken)
 
@@ -89,7 +89,7 @@ class BPETokenizer:
             yield from self._encode_normal_text(text)
         else:
             last_end = 0
-            for match in re.finditer(self.special_pattern, text):
+            for match in self.special_pattern.finditer(text):
                 start, end = match.span()
                 normal_text = text[last_end:start]
                 if normal_text:
@@ -116,17 +116,17 @@ class BPETokenizer:
 
     def decode(self, ids: list[int]) -> str:
         tokens =  []
-        buffer: bytes = b""
+        buffer: list[bytes] = []
         for token_id in ids:
             if token_id in self.id2sp:
                 if buffer:
-                    tokens.append(buffer.decode("utf-8", errors="replace"))
-                    buffer = b""
+                    tokens.append(b"".join(buffer).decode("utf-8", errors="replace"))
+                    buffer = []
                 tokens.append(self.id2sp[token_id])
             elif token_id in self.vocab:
-                buffer += self.vocab[token_id]
+                buffer.append(self.vocab[token_id])
             else:
-                raise ValueError(f"ID {token_id} not found in vocabulary or special tokens.")
+                warnings.warn(f"ID {token_id} not found in vocabulary or special tokens. Skipping this ID.")
         if buffer:
-            tokens.append(buffer.decode("utf-8", errors="replace"))
+            tokens.append(b"".join(buffer).decode("utf-8", errors="replace"))
         return "".join(tokens)
