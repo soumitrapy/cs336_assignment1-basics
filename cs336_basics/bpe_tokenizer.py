@@ -67,7 +67,16 @@ class BPETokenizer:
                 break
             # Merge the best pair
             new_id = self.merge_ids[(ids[k], ids[k + 1])]
-            ids = ids[:k] + [new_id] + ids[k + 2:]
+            new_ids = []
+            i = 0
+            while i < len(ids):
+                if i == k:
+                    new_ids.append(new_id)
+                    i += 2  # Skip the next one since it's merged
+                else:
+                    new_ids.append(ids[i])
+                    i += 1
+            ids = new_ids
         yield from ids
 
     def _encode_normal_text(self, text: str) -> Iterator[int]:
@@ -105,7 +114,7 @@ class BPETokenizer:
         tokens =  []
         buffer: bytes = b""
         for token_id in ids:
-            if self.id2sp and token_id in self.id2sp:
+            if token_id in self.id2sp:
                 if buffer:
                     tokens.append(buffer.decode("utf-8", errors="replace"))
                     buffer = b""
