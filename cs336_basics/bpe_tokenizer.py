@@ -2,6 +2,7 @@ import regex as re
 from typing import Iterable, Iterator
 #from concurrent.futures import ProcessPoolExecutor
 import warnings
+from functools import lru_cache
 
 from .utils.tokenization_utils import load_vocab_and_merges
 
@@ -47,7 +48,7 @@ class BPETokenizer:
         vocab, merges = load_vocab_and_merges(vocab_path=vocab_filepath, merges_path=merges_filepath)
         return cls(vocab=vocab, merges=merges, special_tokens=special_tokens, pretokenization_pattern=pretokenization_pattern)
 
-    
+
     def _bpe(self, pretoken: str) -> Iterator[int]:
         if not pretoken:
             return
@@ -79,10 +80,15 @@ class BPETokenizer:
             ids = newids
         yield from ids
 
+    @lru_cache(maxsize=10_000)
+    def _cached_bpe(self, pretoken: str) -> Iterator[int]:
+        return tuple(self._bpe(pretoken))
+
     def _encode_normal_text(self, text: str) -> Iterator[int]:
         for match in self.pretokenization_pattern.finditer(text):
             pretoken = match.group(0)
-            yield from self._bpe(pretoken)
+            #yield from self._bpe(pretoken)
+            yield from self._cached_bpe(pretoken)
 
     def _encode(self, text: str) -> Iterator[int]:
         if self.special_tokens is None:
@@ -111,7 +117,7 @@ class BPETokenizer:
 
     def encode_iterable(self, texts: Iterable[str]) -> Iterator[int]:
         for text in texts:
-            yield from self.encode(text)
+            yield from self._encode(text)
             
 
     def decode(self, ids: list[int]) -> str:
