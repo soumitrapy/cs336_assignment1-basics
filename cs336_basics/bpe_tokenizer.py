@@ -132,7 +132,7 @@ class BPETokenizer:
         return list(self._encode(text))
 
 
-    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4, batch_size: int = 1024*1024, cache_size=1024*4) -> Iterator[int]:
+    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4, batch_size: int = 1024*1024, cache_size: int | None = 1024*4) -> Iterator[int]:
         # sequential processing if num_workers <= 1
         if num_workers <= 1:
             for text in texts:
