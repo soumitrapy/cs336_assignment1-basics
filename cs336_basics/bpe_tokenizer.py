@@ -141,7 +141,7 @@ class BPETokenizer:
     #         yield from self._encode(text)
 
 
-    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4, batch_size: int = 1024*1024) -> Iterator[int]:
+    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4, batch_size: int = 1024*1024, cache_size=None) -> Iterator[int]:
         # sequential processing if num_workers <= 1
         if num_workers <= 1:
             for text in texts:
@@ -157,7 +157,7 @@ class BPETokenizer:
                 "merges": self.merges,
                 "special_tokens": self.special_tokens,
                 "pretokenization_pattern": self.pretokenization_pattern.pattern,
-                "cache_size": self.cache_size
+                "cache_size": self.cache_size if cache_size is None else cache_size
             }
             with ctx.Pool(processes=num_workers, initializer=init_worker, initargs=(config,)) as pool:
                 for ids in pool.imap(worker_encode, batches):
