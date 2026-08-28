@@ -13,7 +13,7 @@ class BPETokenizer:
         merges: list[tuple[bytes, bytes]],
         special_tokens: list[str] | None = None,
         pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
-        cache_size: int = 10_000,
+        cache_size: int | None = 4096,
         ) -> None:
         self.vocab = vocab
         self.merges = merges
@@ -38,7 +38,7 @@ class BPETokenizer:
                     self.id2sp[count] = token
                     count += 1
             self.special_pattern = re.compile("|".join(re.escape(token) for token in self.special_tokens))
-        self._cached_bpe = lru_cache(maxsize=cache_size)(self._cached_bpe)
+        self._cached_bpe = lru_cache(maxsize=cache_size)(self._cached_bpe) if cache_size is not None else None
     
     @classmethod
     def from_file(cls,
@@ -91,7 +91,10 @@ class BPETokenizer:
         for match in self.pretokenization_pattern.finditer(text):
             pretoken = match.group(0)
             #yield from self._bpe(pretoken)
-            yield from self._cached_bpe(pretoken)
+            if self._cached_bpe is not None:
+                yield from self._cached_bpe(pretoken)
+            else:
+                yield from self._bpe(pretoken)
 
     def _encode(self, text: str) -> Iterator[int]:
         if self.special_tokens is None:
