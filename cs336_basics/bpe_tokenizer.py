@@ -3,8 +3,22 @@ from typing import Iterable, Iterator
 #from concurrent.futures import ProcessPoolExecutor
 import warnings
 from functools import lru_cache
+from multiprocessing import get_context
 
-from .utils.tokenization_utils import load_vocab_and_merges
+from .utils.tokenization_utils import load_vocab_and_merges, create_batch
+
+_tokenizer = None
+def init_worker(config: dict):
+    global _tokenizer
+    _tokenizer = BPETokenizer(**config)
+
+def worker_encode(batch: tuple[str, ...]) -> tuple[int, ...]:
+    ids = []
+    for text in batch:
+        ids.extend(_tokenizer._encode(text))
+    return tuple(ids)
+
+
 
 class BPETokenizer:
     def __init__(
@@ -39,6 +53,7 @@ class BPETokenizer:
                     count += 1
             self.special_pattern = re.compile("|".join(re.escape(token) for token in self.special_tokens))
         self._cached_bpe = lru_cache(maxsize=cache_size)(self._cached_bpe) if cache_size > 0 else None
+        self.cache_size = cache_size
     
     @classmethod
     def from_file(cls,
@@ -121,9 +136,33 @@ class BPETokenizer:
     #         for ids in executor.map(self.encode, texts):
     #             yield from ids
 
-    def encode_iterable(self, texts: Iterable[str]) -> Iterator[int]:
-        for text in texts:
-            yield from self._encode(text)
+    # def encode_iterable(self, texts: Iterable[str]) -> Iterator[int]:
+    #     for text in texts:
+    #         yield from self._encode(text)
+
+
+    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4, batch_size: int = 1024*1024) -> Iterator[int]:
+        # sequential processing if num_workers <= 1
+        if num_workers <= 1:
+            for text in texts:
+                yield from self._encode(text)
+        else:
+            batches = create_batch(texts, batch_size=batch_size)
+            try:
+                ctx = get_context("fork")
+            except:
+                ctx = get_context("spawn")
+            config = {
+                "vocab": self.vocab,
+                "merges": self.merges,
+                "special_tokens": self.special_tokens,
+                "pretokenization_pattern": self.pretokenization_pattern.pattern,
+                "cache_size": self.cache_size
+            }
+            with ctx.Pool(processes=num_workers, initializer=init_worker, initargs=(config,)) as pool:
+                for ids in pool.imap(worker_encode, batches):
+                    yield from ids
+
             
 
     def decode(self, ids: list[int]) -> str:

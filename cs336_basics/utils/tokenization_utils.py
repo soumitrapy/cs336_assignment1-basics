@@ -1,7 +1,20 @@
 import os
-from typing import BinaryIO, TextIO, Iterator
+from typing import BinaryIO, TextIO, Iterator, Iterable
 import regex as re
 import json
+
+def create_batch(texts: Iterable[str], batch_size: int = 1024*1024) -> Iterator[tuple[str,...]]:
+    batch = []
+    total_size = 0
+    for text in texts:
+        if len(batch) > 1 and total_size + len(text) > batch_size:
+            yield tuple(batch)
+            batch = []
+            total_size = len(text)
+        batch.append(text)
+        total_size += len(text)       
+    if batch:
+        yield tuple(batch)
 
 def create_chunks(
         file: TextIO,
