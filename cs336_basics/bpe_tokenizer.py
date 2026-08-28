@@ -45,10 +45,11 @@ class BPETokenizer:
                   vocab_filepath: str,
                   merges_filepath: str,
                   special_tokens: list[str] | None = None,
-                  pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+                  #pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
+                  **kwargs
                 ) -> "BPETokenizer":
         vocab, merges = load_vocab_and_merges(vocab_path=vocab_filepath, merges_path=merges_filepath)
-        return cls(vocab=vocab, merges=merges, special_tokens=special_tokens, pretokenization_pattern=pretokenization_pattern)
+        return cls(vocab=vocab, merges=merges, special_tokens=special_tokens, **kwargs)
 
 
     def _bpe(self, pretoken: str) -> Iterator[int]:
