@@ -27,7 +27,7 @@ class BPETokenizer:
         merges: list[tuple[bytes, bytes]],
         special_tokens: list[str] | None = None,
         pretokenization_pattern: str = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
-        cache_size: int = 4096,
+        cache_size: int = 0,
         ) -> None:
         self.vocab = vocab
         self.merges = merges
@@ -131,17 +131,8 @@ class BPETokenizer:
     def encode(self, text: str) -> list[int]:
         return list(self._encode(text))
 
-    # def encode_iterable(self, texts: Iterable[str], num_workers: int = 4) -> Iterator[int]:
-    #     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-    #         for ids in executor.map(self.encode, texts):
-    #             yield from ids
 
-    # def encode_iterable(self, texts: Iterable[str]) -> Iterator[int]:
-    #     for text in texts:
-    #         yield from self._encode(text)
-
-
-    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4, batch_size: int = 1024*1024, cache_size=None) -> Iterator[int]:
+    def encode_iterable(self, texts: Iterable[str], num_workers: int = 4, batch_size: int = 1024*1024, cache_size=1024*4) -> Iterator[int]:
         # sequential processing if num_workers <= 1
         if num_workers <= 1:
             for text in texts:
