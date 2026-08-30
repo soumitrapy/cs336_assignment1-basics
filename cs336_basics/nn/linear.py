@@ -3,6 +3,7 @@ from einops import einsum
 from jaxtyping import Float
 
 import torch
+from torch import Tensor
 from torch.nn import Module, Parameter
 
 from .init import trunc_normal_
@@ -28,16 +29,14 @@ class Linear(Module):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        #sigma = math.sqrt(2.0 / (self.in_features + self.out_features))
-        # with no_grad(): # automatically done by init functions
-        trunc_normal_(self.w, mean=0.0, std=math.sqrt(2.0 / (self.in_features + self.out_features)))
+        trunc_normal_(self.w)
         if self.b is not None:
-            trunc_normal_(self.b, mean=0.0, std=math.sqrt(2.0 / self.out_features))
+            trunc_normal_(self.b)
 
 
     def forward(self,
-                x: Float[torch.Tensor,"... in_features"]
-                ) -> Float[torch.Tensor,"... out_features"]:
+                x: Float[Tensor,"... in_features"]
+                ) -> Float[Tensor,"... out_features"]:
         y = einsum(x, self.w, "... in_features, out_features in_features -> ... out_features")
         if self.b is not None:
             y = y + self.b

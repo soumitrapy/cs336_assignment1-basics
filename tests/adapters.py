@@ -86,7 +86,10 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    from cs336_basics.nn.activations import SwiGLU
+    swiglu = SwiGLU(in_features=d_model, hidden_features=d_ff)
+    swiglu.load_state_dict({'linear1.w': w1_weight, 'linear2.w': w2_weight, 'linear3.w': w3_weight})
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -203,7 +206,9 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    from cs336_basics.nn.embedding import RotaryPositionalEmbedding
+    rope = RotaryPositionalEmbedding(base=theta, dim=d_k, max_seq_len=max_seq_len)
+    return rope(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
@@ -381,7 +386,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from cs336_basics.nn.normalization import RMSNorm
+    norm = RMSNorm(d_model=d_model, eps=eps)
+    norm.load_state_dict({'g': weights})
+    return norm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -395,7 +403,9 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    from cs336_basics.nn.activations import SiLU
+    silu = SiLU()
+    return silu(in_features)
 
 
 def run_get_batch(
