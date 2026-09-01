@@ -4,11 +4,13 @@ from einops import einsum, rearrange
 
 import torch
 from torch import Tensor
-from torch.nn import Module
+from torch.nn import Module, ModuleList
 
 from .linear import Linear
-from .functional import scaled_dot_product_attention
-from .embedding import RotaryPositionalEmbedding
+from .functional import scaled_dot_product_attention, softmax
+from .embedding import RotaryPositionalEmbedding, Embedding
+from .normalization import RMSNorm
+from .activations import SwiGLU
 
 class MultiheadSelfAttention(Module):
     def __init__(self, d_model: int, 
@@ -46,4 +48,51 @@ class MultiheadSelfAttention(Module):
         out = self.out_proj(attn_out)
         return out
 
+class TransformerBlock(Module):
+    def __init__(self, 
+                 d_model: int, 
+                 num_heads: int, 
+                 d_ff: int, 
+                 theta: float = 10000.0, 
+                 max_seq_len: int | None = None,
+                 ) -> None:
+        super().__init__()
+        self.attn = MultiheadSelfAttention(d_model=d_model, num_heads=num_heads, theta=theta, max_seq_len=max_seq_len)
+        self.ffn = SwiGLU(in_features=d_model, hidden_features=d_ff)
+        self.ln1 = RMSNorm(d_model)
+        self.ln2 = RMSNorm(d_model)
         
+    def forward(self, x: Float[Tensor, "... seq_len d_model"], token_positions: Int[Tensor, "... seq_len"] | None = None) -> Float[Tensor, "... seq_len d_model"]:
+        attn_out = self.attn(self.ln1(x), token_positions)
+        x = x + attn_out
+        ffn_out = self.ffn(self.ln2(x))
+        x = x + ffn_out
+        return x
+
+
+class TransformerLM(Module):
+    def __init__(self, 
+                 vocab_size: int,
+                 context_len: int,
+                 num_layers: int,
+                 d_model: int = 2**13,
+                 num_heads: int = 16,
+                 d_ff: int = 2**15,
+                 rope_theta: float = 10000.0,
+                 ) -> None:
+        super().__init__()
+        self.embedding = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
+        self.num_layers = num_layers
+        self.d_model = d_model
+        self.layers = ModuleList([TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, theta=rope_theta, max_seq_len=context_len) for _ in range(num_layers)])
+        self.final_norm = RMSNorm(d_model)
+        self.output_proj = Linear(d_model, vocab_size)
+
+    def forward(self, x: Int[Tensor, "... seq_len"]) -> Float[Tensor, "... seq_len vocab_size"]:
+        x = self.embedding(x)
+        for mha in self.layers:
+            x = mha(x, token_positions=None)
+        x = self.final_norm(x)
+        logits = self.output_proj(x)
+        #logits = softmax(logits, dim=-1)
+        return logits

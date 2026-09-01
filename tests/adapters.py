@@ -290,7 +290,19 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.nn.attention import TransformerBlock
+    transformer_block = TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, theta=theta, max_seq_len=max_seq_len)
+    
+    my_weights = {'attn.qkv_proj.w': torch.cat([weights['attn.q_proj.weight'], weights['attn.k_proj.weight'], weights['attn.v_proj.weight']], dim=0),
+                  'attn.out_proj.w': weights['attn.output_proj.weight'],
+                  'ffn.linear1.w': weights['ffn.w1.weight'],
+                  'ffn.linear2.w': weights['ffn.w2.weight'],
+                  'ffn.linear3.w': weights['ffn.w3.weight'],
+                  'ln1.g': weights['ln1.weight'],
+                  'ln2.g': weights['ln2.weight']
+                }
+    transformer_block.load_state_dict(my_weights)
+    return transformer_block(in_features)
 
 
 def run_transformer_lm(
@@ -372,7 +384,22 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.nn.attention import TransformerLM
+    transformer_lm = TransformerLM(vocab_size=vocab_size, context_len=context_length, d_model=d_model, num_layers=num_layers, num_heads=num_heads, d_ff=d_ff, rope_theta=rope_theta)
+    my_weights = {'embedding.w': weights['token_embeddings.weight'],
+                  'final_norm.g': weights['ln_final.weight'],
+                  'output_proj.w': weights['lm_head.weight']
+                  }
+    for idx in range(num_layers):
+        my_weights[f'layers.{idx}.attn.qkv_proj.w'] = torch.cat([weights[f'layers.{idx}.attn.q_proj.weight'], weights[f'layers.{idx}.attn.k_proj.weight'], weights[f'layers.{idx}.attn.v_proj.weight']], dim=0)
+        my_weights[f'layers.{idx}.attn.out_proj.w'] = weights[f'layers.{idx}.attn.output_proj.weight']
+        my_weights[f'layers.{idx}.ffn.linear1.w'] = weights[f'layers.{idx}.ffn.w1.weight']
+        my_weights[f'layers.{idx}.ffn.linear2.w'] = weights[f'layers.{idx}.ffn.w2.weight']
+        my_weights[f'layers.{idx}.ffn.linear3.w'] = weights[f'layers.{idx}.ffn.w3.weight']
+        my_weights[f'layers.{idx}.ln1.g'] = weights[f'layers.{idx}.ln1.weight']
+        my_weights[f'layers.{idx}.ln2.g'] = weights[f'layers.{idx}.ln2.weight']
+    transformer_lm.load_state_dict(my_weights)
+    return transformer_lm(in_indices)
 
 
 def run_rmsnorm(
