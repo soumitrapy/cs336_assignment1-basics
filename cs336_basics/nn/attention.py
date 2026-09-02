@@ -10,7 +10,7 @@ from .linear import Linear
 from .functional import scaled_dot_product_attention, softmax
 from .embedding import RotaryPositionalEmbedding, Embedding
 from .normalization import RMSNorm
-from .activations import SwiGLU
+from .activation import SwiGLU
 
 class MultiheadSelfAttention(Module):
     def __init__(self, d_model: int, 

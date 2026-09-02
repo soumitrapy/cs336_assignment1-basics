@@ -86,7 +86,7 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    from cs336_basics.nn.activations import SwiGLU
+    from cs336_basics.nn.activation import SwiGLU
     swiglu = SwiGLU(in_features=d_model, hidden_features=d_ff)
     swiglu.load_state_dict({'linear1.w': w1_weight, 'linear2.w': w2_weight, 'linear3.w': w3_weight})
     return swiglu(in_features)
@@ -439,7 +439,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    from cs336_basics.nn.activations import SiLU
+    from cs336_basics.nn.activation import SiLU
     silu = SiLU()
     return silu(in_features)
 

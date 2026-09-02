@@ -24,3 +24,6 @@ longest token in vocab: b' accomplishment'
 - c. Average throughput for owt tokenizer on owt data: 414148.82 bytes/second or 0.41 MB/second
 To process 852 GB data, it would take 571.45 hours
 - d.as uint16 can represent total 2^16 unsigned numbers. and my vocab has only 32k id, so it is sufficient for my use case.
+
+# Problem (transformer_accounting): Transformer LM resource accounting (5 points)
+- a. 
