@@ -31,7 +31,7 @@ To process 852 GB data, it would take 571.45 hours
 | Embedding | ... -> ... d_model | vocab_size.d_model | 0 |
 | Rope | ... seq_len d_k -> ... seq_len d_k | 0 | 3.d_k.seq_len |
 | Softmax | ... d -> ... d | 0 | 3.d |
-| Linear(without b) | ... in_features -> ... out_features | out_features.in_features | 2.in_features.out_features |
+| Linear | ... in_features -> ... out_features | out_features.in_features | (2.in_features-1).out_features |
 | RMSNorm | ... d_model -> ... d_model | d_model | 3.d_model |
 | sigmoid | ... d -> ... d | 0 | 4d |
 | SiLU | ... d -> ... d | 0 | 5d |
