@@ -89,10 +89,10 @@ class TransformerLM(Module):
         self.output_proj = Linear(d_model, vocab_size)
 
     def forward(self, x: Int[Tensor, "... seq_len"]) -> Float[Tensor, "... seq_len vocab_size"]:
-        x = self.embedding(x)
+        x = self.embedding(x)                   # shape (..., seq_len, d_model)
         for mha in self.layers:
-            x = mha(x, token_positions=None)
-        x = self.final_norm(x)
-        logits = self.output_proj(x)
+            x = mha(x, token_positions=None)    # shape (..., seq_len, d_model)
+        x = self.final_norm(x)                  # shape (..., seq_len, d_model)
+        logits = self.output_proj(x)            # shape (..., seq_len, vocab_size)
         #logits = softmax(logits, dim=-1)
         return logits

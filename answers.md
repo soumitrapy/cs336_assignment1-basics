@@ -26,4 +26,30 @@ To process 852 GB data, it would take 571.45 hours
 - d.as uint16 can represent total 2^16 unsigned numbers. and my vocab has only 32k id, so it is sufficient for my use case.
 
 # Problem (transformer_accounting): Transformer LM resource accounting (5 points)
-- a. 
+| Module | shapes | #parameters | #FLOPS | O(FLOPS) |
+|:------ |:------|:------|:------|:------|
+| Embedding | ... -> ... d_model | vocab_size.d_model | 0 |
+| Rope | ... seq_len d_k -> ... seq_len d_k | 0 | 3.d_k.seq_len |
+| Softmax | ... d -> ... d | 0 | 3.d |
+| Linear(without b) | ... in_features -> ... out_features | out_features.in_features | 2.in_features.out_features |
+| RMSNorm | ... d_model -> ... d_model | d_model | 3.d_model |
+| sigmoid | ... d -> ... d | 0 | 4d |
+| SiLU | ... d -> ... d | 0 | 5d |
+| SwiGLU | ... d_model -> ... d_model | 3.d_model.d_ff | 6.d_model.d_ff + 6.d_ff |
+|scaled_dot_prod_attention (d_k=d_v) | ... seq_len d_k, ... seq_len d_k,  ... seq_len d_k -> ... seq_len d_k | 0 | 4.seq_len<sup>2</sup>.d_k + 3.seq_len<sup>2</sup> | 4.seq_len<sup>2</sup>.d_k |
+| MultiheadedAttention (with rope) | ... seq_len d_model -> ... seq_len d_model | 4.d_model.(num_heads.d_k) | **8.seq_len.d_model.(num_heads.d_k)**[qkv_proj+out_proj] + **4.seq_len<sup>2</sup>.(num_heads.d_k)** + 3.seq_len<sup>2</sup>.num_heads [scaled_dot_product] + 6.seq_len.(num_heads.d_k)[rope] [if num_heads.d_k = d_model: 8.seq_len.d_model<sup>2</sup> + 4.seq_len<sup>2</sup>.d_model + 6.seq_len.d_model + 3.seq_len<sup>2</sup>.num_heads |  8.seq_len.d_model.(num_heads.d_k) + 4 seq_len<sup>2</sup>.(num_heads_d_k) [ 8.seq_len.d_model<sup>2</sup> + 4.d_model.seq_len<sup>2</sup>] |
+| TransformerBlock| ... seq_len d_model -> ... seq_len d_model | 4_d_model.(num_heads.d_k) + 3.d_model.d_ff + 2.d_model | [MultiheadAttention] + (**6.seq_len.d_model.d_ff** + 6.seq_len.d_ff)[FFN(SwiGLU)] + 2.seq_len.d_model | 8.seq_len.d_model.(num_heads.d_k) + 4 seq_len<sup>2</sup>.(num_heads_d_k) + 4.seq_len.d_ff [ 8.seq_len.d_model<sup>2</sup> + 4.d_model.seq_len<sup>2</sup>] + 4.seq_len.d_ff |
+|TransformerLM| ... seq_len -> ... seq_len vocab_size | 2.vocab_size.d_model+d_model+num_layers.(4_d_model.(num_heads.d_k) + 3.d_model.d_ff + 2.d_model) | num_layers.[TransformerBlock]+ 3.seq_len.d_model + 2.seq_len.d_model.vocab_size | num_layers.(8.seq_len.d_model.(num_heads.d_k) + 4 seq_len<sup>2</sup>.(num_heads_d_k) + 4.seq_len.d_ff) + 2.seq_len.vocab_size |
+
+- a. Number of Parameters = 2.vocab_size.d_model + d_model + num_layers.(4_d_model.(num_heads.d_k) + 3.d_model.d_ff + 2.d_model). Total parameters: 1640452800 ~ 1.6B, total parameters in GB (in fp32): 6.5618112 GB
+- b.
+
+| Matrix | FLOPS |
+|:------ |:------|
+| output_proj | 2.seq_len.d_model.vocab_size.(batch) |
+|MultiHeadSelfAttention | **8.seq_len.d_model.(num_heads.d_k)**[qkv_proj+out_proj] + **4.seq_len<sup>2</sup>.(num_heads.d_k)** + 3.seq_len<sup>2</sup>.num_heads [scaled_dot_product] + 6.seq_len.(num_heads.d_k)[rope] |
+|FFN (SwiGLu) | 6.d_model.d_ff.(batch) |
+
+- c. In most of the cases FFN is taking most of the flops (~60%) followed by multi head attention (~30%)
+
+- d. If I increase the context length, Boottleneck becomes the multihead attention (~73%)
