@@ -8,7 +8,8 @@ from tqdm import tqdm
 import heapq
 import regex as re
 
-from .utils.tokenization_utils import find_chunk_boundaries, save_vocab_and_merges
+from .utils.checkpointing import save_vocab_and_merges
+from .utils.tokenization_utils import find_chunk_boundaries
 
 class Pretoken:
     def __init__(self, value: tuple[int, ...], freq: int):

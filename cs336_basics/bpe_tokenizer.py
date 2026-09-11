@@ -5,7 +5,8 @@ import warnings
 from functools import lru_cache
 from multiprocessing import get_context
 
-from .utils.tokenization_utils import load_vocab_and_merges, create_batch
+from .utils.checkpointing import load_vocab_and_merges
+from .utils.tokenization_utils import create_batch
 
 _tokenizer = None
 def init_worker(config: dict):
