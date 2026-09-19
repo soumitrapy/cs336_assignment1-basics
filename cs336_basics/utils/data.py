@@ -28,7 +28,7 @@ def get_batch(x: npt.NDArray,
     indices = np.random.randint(0, len(x) - seq_len, size=batch_size)
     x_batch = np.stack([x[i:i+seq_len] for i in indices])
     y_batch = np.stack([x[i+1:i+1+seq_len] for i in indices])
-    return LongTensor(x_batch, device=device), LongTensor(y_batch, device=device)
+    return torch.tensor(x_batch, dtype=torch.long, device=device), torch.tensor(y_batch, dtype=torch.long, device=device)
 
 
 def get_data_loader(x: npt.NDArray,
@@ -44,7 +44,7 @@ def get_data_loader(x: npt.NDArray,
         if k > 0:
             x_batch = x[i:i+k*seq_len].reshape(k, seq_len)
             y_batch = x[i+1:i+1+k*seq_len].reshape(k, seq_len)
-            yield LongTensor(x_batch, device=device), LongTensor(y_batch, device=device)
+            yield torch.tensor(x_batch, dtype=torch.long, device=device), torch.tensor(y_batch, dtype=torch.long, device=device)
         
 
         
