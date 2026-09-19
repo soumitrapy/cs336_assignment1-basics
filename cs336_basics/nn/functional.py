@@ -41,9 +41,17 @@ def logsumexp(x: Float[Tensor, "..."],
 
 def cross_entropy_loss(logits: Float[Tensor, "... num_classes"],
                        targets: Int[Tensor, "..."],
+                       reduction: str = "mean",
 )-> Float[Tensor, "..."]:
     targets_logits = logits.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1) # shape (...), logits of the target class
-    return -targets_logits + logsumexp(logits, dim=-1) # shape (...), cross entropy loss for each sample
+    loss = -targets_logits + logsumexp(logits, dim=-1) # shape (...), cross entropy loss for each sample
+    if reduction == "mean":
+        return loss.mean()
+    elif reduction == "sum":
+        return loss.sum()
+    else:
+        Warning(f"Invalid reduction type: {reduction}. Returning unreduced loss.")
+        return loss
 
 def perplexity(logits: Float[Tensor, "... seq_len num_classes"],
                targets: Int[Tensor, "... seq_len"],
