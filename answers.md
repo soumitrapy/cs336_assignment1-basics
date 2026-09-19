@@ -58,148 +58,56 @@ To process 852 GB data, it would take 571.45 hours
 It will depend.
 
 # Problem (adamw_accounting): Resource accounting for training with AdamW (2 points)
-```python
-def scaled_dot_product_attention(q: Float[Tensor, "... query_seq_len d_k"],
-                                 k: Float[Tensor, "... key_seq_len d_k"],
-                                 v: Float[Tensor, "... key_seq_len d_v"],
-                                 mask: Bool[Tensor, "query_seq_len key_seq_len"] = None,
-                                 ) -> Float[Tensor, "... query_seq_len d_v"]: ### Peak Memory: ... (seq_len.d_k + 2.seq_len^2) (excluding input variables)
-    d_k = q.shape[-1]
-    scores =  einsum(q, k, "... query_seq_len d_k, ... key_seq_len d_k -> ... query_seq_len key_seq_len") / (d_k ** 0.5) 
-    # Memory: ... seq_len^2 (scores)
-    if mask is not None:
-        scores = scores.masked_fill(~mask, float('-inf'))
-    attn_weights = softmax(scores, dim=-1) # Memory: ... seq_len^2 (scores) + ... seq_len^2 (attn_weights)
-    output = einsum(attn_weights, v, "... query_seq_len key_seq_len, ... key_seq_len d_v -> ... query_seq_len d_v") 
-    # Memory: ... seq_len^2 (scores) + ... seq_len^2 (attn_weights) + ... seq_len d_v (output)
-    return output
+Memory usage of Activation means the memory occupied by the intermediate values produced during the forward pass that need to be kept for the backward pass.
 
-class MultiheadSelfAttention(Module):
-     def __init__(self, d_model: int, 
-                 num_heads: int,
-                 theta: float = 10000.0,
-                 max_seq_len: int | None = None,
-                 ) -> None:
-        super().__init__()
-        self.d_model = d_model
-        self.num_heads = num_heads
-        self.d_k = d_model // num_heads
-        self.d_v = d_model // num_heads
-
-        self.qkv_proj = Linear(d_model, (self.d_k + self.d_k + self.d_v)*self.num_heads)
-        self.out_proj = Linear(self.num_heads * self.d_v, d_model)
-        self.rope = None
-        if max_seq_len is not None:
-            self.rope = RotaryPositionalEmbedding(base=theta, dim=self.d_k, max_seq_len=max_seq_len)
-
-    def forward(self, 
-                x: Float[Tensor, "... seq_len d_model"],
-                token_positions: Int[Tensor, "... seq_len"] | None = None
-                ) -> Float[Tensor, "... seq_len d_model"]: 
-                # Peak Memory: ... 7.seq_len d_k.num_heads(proj+q,k,v) + seq_len^2 (mask) + 2.seq_len^2.num_heads (or ...seq_len.d_model)
-        proj = self.qkv_proj(x) # Memory: ... 3.seq_len.d_k.num_heads(proj)
-        q, k, v = torch.split(proj, [self.num_heads*self.d_k, self.num_heads*self.d_k, self.num_heads*self.d_v], dim=-1) 
-        # Memory: ... 6.seq_len.d_k.num_heads(proj+q,k,v)
-        q = rearrange(q, "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", num_heads=self.num_heads)
-        k = rearrange(k, "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", num_heads=self.num_heads)
-        v = rearrange(v, "... seq_len (num_heads d_v) -> ... num_heads seq_len d_v", num_heads=self.num_heads)
-        if self.rope is not None:
-            q, k = self.rope(q, token_positions), self.rope(k, token_positions) 
-        seq_len = x.shape[-2]
-        mask = torch.tril(torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device), diagonal=0) # shape (seq_len, seq_len)
-        # Memory: ... 6.seq_len d_k.num_heads(proj+q,k,v) + seq_len^2 (mask)
-        attn_out = scaled_dot_product_attention(q, k, v, mask)
-        # Memory: ... 6.seq_len d_k.num_heads(proj+q,k,v) + seq_len^2 (mask) + ... seq_len.d_k.num_heads + 2.seq_len^2.num_heads (multihead_attention)
-        out = self.out_proj(attn_out)
-        # Memory: ... 6.seq_len d_k.num_heads(proj+q,k,v) + seq_len^2 (mask) + ... seq_len.d_k.num_heads (attn_out) + ...seq_len.d_model (out)
-        return out
-
-class SiLU(Module):
-    def forward(self,
-                x: Float[Tensor,"... d_model"]
-                ) -> Float[Tensor,"... d_model"]:
-        return einsum(x, torch.sigmoid(x), "... d_model, ... d_model-> ... d_model")
-
-class SwiGLU(Module):
-    def __init__(self,
-                 in_features: int,
-                 hidden_features: int | None = None,
-                 ) -> None:
-        super().__init__()
-        self.in_features = in_features
-        if hidden_features is None:
-            self.d_ff = max(round(in_features/(3*8)), 1)*64 # d_ff = 8/3 * d_model nearest multiple of 64
-        else:
-            self.d_ff = hidden_features
-        self.linear1 = Linear(self.in_features, self.d_ff)
-        self.linear3 = Linear(self.in_features, self.d_ff)
-        self.linear2 = Linear(self.d_ff, self.in_features)
-        self.silu = SiLU()
-
-    def forward(self,
-                x: Float[Tensor,"... d_model"]
-                ) -> Float[Tensor,"... d_model"]:
-        x1 = self.silu(self.linear1(x))
-        x3 = self.linear3(x)
-        x2 = self.linear2(einsum(x1, x3, "... d_ff, ... d_ff -> ... d_ff"))
-        return x2
-
-class TransformerBlock(Module):
-    def __init__(self, 
-                 d_model: int, 
-                 num_heads: int, 
-                 d_ff: int, 
-                 theta: float = 10000.0, 
-                 max_seq_len: int | None = None,
-                 ) -> None:
-        super().__init__()
-        self.attn = MultiheadSelfAttention(d_model=d_model, num_heads=num_heads, theta=theta, max_seq_len=max_seq_len)
-        self.ffn = SwiGLU(in_features=d_model, hidden_features=d_ff)
-        self.ln1 = RMSNorm(d_model)
-        self.ln2 = RMSNorm(d_model)
-        
-    def forward(self, x: Float[Tensor, "... seq_len d_model"], token_positions: Int[Tensor, "... seq_len"] | None = None) -> Float[Tensor, "... seq_len d_model"]: # Peak Memory: ... 7.seq_len d_k.num_heads(proj+q,k,v) + seq_len^2 (mask) + 2.seq_len^2.num_heads (or ...seq_len.d_model)
-        attn_out = self.attn(self.ln1(x), token_positions) # Memory: ... 7.seq_len d_k.num_heads(proj+q,k,v) + seq_len^2 (mask) + 2.seq_len^2.num_heads (or ...seq_len.d_model)
-        x = x + attn_out # Memory: ...seq_len.d_model
-        ffn_out = self.ffn(self.ln2(x)) # ...seq_len.d_model
-        x = x + ffn_out # Memory: ...seq_len.d_model
-        return x
-
-
-class TransformerLM(Module):
-    def __init__(self, 
-                 vocab_size: int,
-                 context_len: int,
-                 num_layers: int,
-                 d_model: int = 2**13,
-                 num_heads: int = 16,
-                 d_ff: int = 2**15,
-                 rope_theta: float = 10000.0,
-                 ) -> None:
-        super().__init__()
-        self.embedding = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
-        self.num_layers = num_layers
-        self.d_model = d_model
-        self.layers = ModuleList([TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, theta=rope_theta, max_seq_len=context_len) for _ in range(num_layers)])
-        self.final_norm = RMSNorm(d_model)
-        self.output_proj = Linear(d_model, vocab_size)
-
-    def forward(self, x: Int[Tensor, "... seq_len"]) -> Float[Tensor, "... seq_len vocab_size"]:
-        x = self.embedding(x)                   # shape (..., seq_len, d_model)
-        for mha in self.layers:
-            x = mha(x, token_positions=None)    # shape (..., seq_len, d_model)
-        x = self.final_norm(x)                  # shape (..., seq_len, d_model)
-        logits = self.output_proj(x)            # shape (..., seq_len, vocab_size)
-        #logits = softmax(logits, dim=-1)
-        return logits
 ```
+batch_size: B
+context_length: T
+vocab_size: V
+d_model: d
+d_ff: (8/3)d
+num_heads: h
+num_layers: L
 
+TransformerLM: L(8BTd + 4BTd_ff + 2BhT^2) + BTd + 2BTV = L((18.67)BTd + 2BhT^2)+ BTd + 2BTV
+    TransformerBlock: 8BTd + 4BTd_ff + 2BhT^2 = (18.67)BTd + 2BhT^2
+        RMSNorm(s): 2BTd
+        MultiHeadAttention: 5BTd + 2BhT^2
+            𝑄𝐾𝑉 projections: 3BTd
+            𝑄𝐾⊤ matrix multiply: BhT^2
+            softmax: BhT^2
+            weighted sum of values: BTd
+            output projection: BTd
 
+        FFN(SwiGLU): 4BTd_ff + BTd = (11.67)BTd
+            𝑊1: BT.d_ff
+            𝑊2: BT.d_ff
+            SiLU on the gate branch: BT.d_ff
+            element-wise product: BT.d_ff
+            𝑊3: BTd
 
-
+    Final RMSNorm: BTd
+    Output Embedding: BTV
+    CrossEntropy on logits: BTV
+```
 - a.
-| Parameters | 2.vocab_size.d_model+d_model+num_layers.(12.d_model<sup>2</sup> + 2.d_model) | [d_model = num_heads.d_k, d_ff = 8/3.d_model]
+
+
+|Component|#Float32|
+|:-----|:-----|
+| Parameters | 2Vd + d + L(4d^2+3d.d_ff + 2d) |
 | Gradients | #Parameters |
-| Optimizer State | 2.#Parameters |
-| Activations | batch_size.7.seq_len d_model + seq_len^2 + 2.seq_len^2.num_heads (or batch.seq_len.d_model)
+| Optimizer State | 2#Parameters |
+| Activations | BTd + 2BTV + L(8BTd + 4BTd_ff + 2BhT^2) |
+
+- b. GPT2-XL Config: vocab_size:  50,257
+context_length:  1,024
+num_layers:  48
+d_model:  1,600
+num_heads:  25
+d_ff:  4,288 (the nearest multiple of 64 to 8/3 × 1600)
+
+- c. #FLOPs= 12 #Parameters
+
+- d.
 
