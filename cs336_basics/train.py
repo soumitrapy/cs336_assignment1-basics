@@ -130,7 +130,7 @@ def train(**kwargs):
                 "val/tokens_seen": total_tokens_seen,
             }, step=i)
 
-        if i % config.logging_interval == 0:
+        if i % config.log_interval == 0:
             logger.info(f"Step {i}: Training Loss: {loss:.4f}, Grad Norm: {grad_norm:.4f}, LR: {scheduler.get_last_lr()[0]:.6f}")
             wandb.log({
                 "train/loss": loss.item(),
