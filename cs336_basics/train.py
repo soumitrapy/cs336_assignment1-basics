@@ -4,6 +4,7 @@ from collections.abc import Iterator, Iterable
 import os
 import yaml
 import wandb
+from tqdm import tqdm
 
 import torch
 from torch import Tensor
@@ -89,7 +90,8 @@ def validation(valds: np.memmap,
             total_tokens += x.numel()
     model.train()
     avg_loss = total_loss / total_tokens
-    return avg_loss
+    perplexity = np.exp(avg_loss)
+    return avg_loss, perplexity
     
 
 def train(**kwargs):
@@ -111,7 +113,8 @@ def train(**kwargs):
     #-------------- Training Loop --------------#
     model.train()
     total_tokens_seen = 0
-    for i in range(iteration, iteration+config.n_steps):
+    pbar = tqdm(range(iteration, iteration+config.n_steps), desc="Training")
+    for i in pbar:
         x, y = get_batch(trainds, config.batch_size, config.context_len, device=config.device)
         loss, grad_norm = train_step(x, y, model, optimizer, scheduler)
         num_tokens = x.numel()
@@ -119,8 +122,8 @@ def train(**kwargs):
         loss = loss / num_tokens  # Normalize loss by number of tokens
     
         if i % config.val_interval == 0:
-            avg_loss = validation(valds, model, config, n_steps=config.val_steps)
-            logger.info(f"Step {i}: Validation Loss: {avg_loss:.4f}, perplexity: {torch.exp(avg_loss):.4f}")
+            avg_loss, perplexity = validation(valds, model, config, n_steps=config.val_steps)
+            logger.info(f"Step {i}: Validation Loss: {avg_loss:.4f}, perplexity: {perplexity:.4f}")
             wandb.log({
                 "val/loss": avg_loss,
                 "val/perplexity": torch.exp(avg_loss),
