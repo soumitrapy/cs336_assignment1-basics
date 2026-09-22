@@ -120,7 +120,15 @@ def train(**kwargs):
         num_tokens = x.numel()
         total_tokens_seen += num_tokens
         loss = loss / num_tokens  # Normalize loss by number of tokens
-    
+
+        pbar.set_postfix({
+            "Loss": f"{loss.item():.4f}",
+            "Grad Norm": f"{grad_norm.item():.4f}",
+            "LR": f"{scheduler.get_last_lr()[0]:.6f}"
+        })
+        pbar.update(1)
+
+
         if i % config.val_interval == 0:
             avg_loss, perplexity = validation(valds, model, config, n_steps=config.val_steps)
             logger.info(f"Step {i}: Validation Loss: {avg_loss:.4f}, perplexity: {perplexity:.4f}")
@@ -146,7 +154,7 @@ def train(**kwargs):
 
         if i % config.checkpoint_interval == 0:
             checkpoint_path = os.path.join(config.checkpoint_dir, f"step_{i}.pt")
-            save_checkpoint(checkpoint_path, model, optimizer, scheduler, i)
+            save_checkpoint(checkpoint_path, model, optimizer, i, scheduler)
             logger.info(f"Checkpoint saved at step {i} to {checkpoint_path}")
             wandb.save(checkpoint_path)
 

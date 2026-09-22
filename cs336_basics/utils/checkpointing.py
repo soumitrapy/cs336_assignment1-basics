@@ -6,10 +6,10 @@ import torch
 from torch.nn import Module
 
 
-def save_checkpoint(model: Module,
+def save_checkpoint(out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes],
+                    model: Module,
                     optimizer: torch.optim.Optimizer,
                     iteration: int,
-                    out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes],
                     lr_scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
                     ) -> None:
     os.makedirs(os.path.dirname(out), exist_ok=True)
