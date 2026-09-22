@@ -126,7 +126,7 @@ def train(**kwargs):
             logger.info(f"Step {i}: Validation Loss: {avg_loss:.4f}, perplexity: {perplexity:.4f}")
             wandb.log({
                 "val/loss": avg_loss,
-                "val/perplexity": torch.exp(avg_loss),
+                "val/perplexity": perplexity,
                 "val/tokens_seen": total_tokens_seen,
             }, step=i)
 
