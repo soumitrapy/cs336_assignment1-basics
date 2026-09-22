@@ -42,7 +42,7 @@ def logsumexp(x: Float[Tensor, "..."],
 def cross_entropy_loss(logits: Float[Tensor, "... num_classes"],
                        targets: Int[Tensor, "..."],
                        reduction: str = "mean",
-)-> Float[Tensor, "..."]:
+)-> Tensor:
     targets_logits = logits.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1) # shape (...), logits of the target class
     loss = -targets_logits + logsumexp(logits, dim=-1) # shape (...), cross entropy loss for each sample
     if reduction == "mean":
@@ -57,4 +57,4 @@ def perplexity(logits: Float[Tensor, "... seq_len num_classes"],
                targets: Int[Tensor, "... seq_len"],
 ) -> Float[Tensor, "..."]:
     loss = cross_entropy_loss(logits, targets) # shape (... , seq_len), cross entropy loss for each sample
-    return torch.exp(loss.mean(dim=-1))
+    return torch.exp(loss)

@@ -24,13 +24,25 @@ class TrainingConfig(BaseModel):
     warmup_step: int = 1e2
     final_step: int = 1e4
     #------ Training configuration ------
-    epochs: int = 2
+    n_steps: int = 10000
     batch_size: int = 3
+
+    #------ Validation configuration ------
+    val_interval: int = 1000
+    val_steps: int = 100
+    #full_val_interval: int = 10000
+    #full_val_steps: int = 1000
+
     #------ Checkpoint configuration ------
-    checkpoint_dir: str = "checkpoints"
+    checkpoint_dir: str = "checkpoints/testing"
     initial_checkpoint: str | None = None
-    #------ Device configuration ------
+    checkpoint_interval: int = 1000
+    #------ Logging configuration ------
+    log_interval: int = 100
+    logging_path: str = "logs/training.log"
+    #------ Miscellaneous configuration ------
     device: str = "cpu"
+    seed: int = 42
 
     @model_validator(mode="before")
     @classmethod

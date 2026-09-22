@@ -1,4 +1,6 @@
 ### My Addition ###
+logs/
+runs/
 configs/
 checkpoints/
 data/
