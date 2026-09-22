@@ -101,7 +101,7 @@ def train(**kwargs):
     config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
     config = TrainingConfig(**config)
     setup_seed(config.seed)
-    setup_logging(config.logging_path)
+    setup_logging(config)
     #-------------- Data Loading --------------#
     trainds, valds = load_data(config)
     
