@@ -38,8 +38,8 @@ class TrainingConfig(BaseModel):
     initial_checkpoint: str | None = None
     checkpoint_interval: int = 1000
     #------ Logging configuration ------
-    log_interval: int = 100
-    logging_path: str = "logs/training.log"
+    #log_interval: int = 100
+    log_path: str = "logs/training.log"
     #------ Miscellaneous configuration ------
     device: str = "cpu"
     seed: int = 42

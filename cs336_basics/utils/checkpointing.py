@@ -4,32 +4,29 @@ import typing
 
 import torch
 from torch.nn import Module
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler
 
 
-def save_checkpoint(out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes],
-                    model: Module,
-                    optimizer: torch.optim.Optimizer,
+def save_checkpoint(model: Module,
+                    optimizer: Optimizer,
                     iteration: int,
-                    lr_scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+                    out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes],
                     ) -> None:
     os.makedirs(os.path.dirname(out), exist_ok=True)
     torch.save({
         "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
-        "lr_scheduler": lr_scheduler.state_dict() if lr_scheduler is not None else None,
         "iteration": iteration
     }, out)
 
 def load_checkpoint(src: str | os.PathLike | typing.BinaryIO | typing.IO[bytes],
                     model: Module,
-                    optimizer: torch.optim.Optimizer,
-                    lr_scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+                    optimizer: Optimizer,
                     ) -> int:
     checkpoint = torch.load(src)
     model.load_state_dict(checkpoint["model"])
     optimizer.load_state_dict(checkpoint["optimizer"])
-    if lr_scheduler is not None:
-        lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
     return checkpoint["iteration"]
 
 def save_vocab_and_merges(vocab: dict[int, bytes],

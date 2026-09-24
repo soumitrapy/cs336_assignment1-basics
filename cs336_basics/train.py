@@ -7,7 +7,7 @@ import wandb
 from tqdm import tqdm
 
 import torch
-from torch import Tensor
+from torch import Tensor, mode
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
@@ -32,12 +32,13 @@ def load_data(config: dict) -> tuple[np.memmap, np.memmap]:
     return trainds, valds
 
 def load_model_optimizers_schedulers(config: dict) -> tuple[Module, Optimizer, LRScheduler, int]:
-    iteration = 0
+    iteration = -1
     model = TransformerLM(vocab_size=config.vocab_size,
                           context_len=config.context_len,
-                          d_model=config.d_model,
-                          d_ff=config.d_ff,
                           num_layers=config.num_layers,
+                          d_model=config.d_model,
+                          num_heads=config.num_heads,
+                          d_ff=config.d_ff,
                           rope_theta=config.rope_theta,
                           ).to(config.device)
     
@@ -61,7 +62,7 @@ def train_step(x: Tensor,
                model: Module,
                optimizer: Optimizer,
                scheduler: LRScheduler,
-               ) -> Tensor:
+               ) -> tuple[Tensor, Tensor]:
     model.train()
     optimizer.zero_grad()
     logits = model(x)
@@ -77,7 +78,7 @@ def validation(valds: np.memmap,
                model: Module,
                config: dict,
                n_steps: int = 100,
-               ) -> float:
+               ) -> Tensor:
     model.eval()
     total_loss = 0.0
     total_tokens = 0
@@ -86,12 +87,11 @@ def validation(valds: np.memmap,
             x, y = get_batch(valds, config.batch_size, config.context_len, device=config.device)
             logits = model(x)
             loss = cross_entropy_loss(logits, y)
-            total_loss += loss.item()
+            total_loss += loss
             total_tokens += x.numel()
     model.train()
-    avg_loss = total_loss / total_tokens
-    perplexity = np.exp(avg_loss)
-    return avg_loss, perplexity
+    avg_loss = total_loss / n_steps
+    return avg_loss
     
 
 def train(**kwargs):
@@ -113,50 +113,47 @@ def train(**kwargs):
     #-------------- Training Loop --------------#
     model.train()
     total_tokens_seen = 0
-    pbar = tqdm(range(iteration, iteration+config.n_steps), desc="Training")
+    pbar = tqdm(range(iteration+1, iteration+1+config.n_steps), desc="Training")
     for i in pbar:
         x, y = get_batch(trainds, config.batch_size, config.context_len, device=config.device)
         loss, grad_norm = train_step(x, y, model, optimizer, scheduler)
-        num_tokens = x.numel()
-        total_tokens_seen += num_tokens
-        loss = loss / num_tokens  # Normalize loss by number of tokens
+        total_tokens_seen += x.numel()
 
         pbar.set_postfix({
+            "Iteration": i,
             "Loss": f"{loss.item():.4f}",
+            "Perplexity": f"{torch.exp(loss).item():.4f}",
             "Grad Norm": f"{grad_norm.item():.4f}",
             "LR": f"{scheduler.get_last_lr()[0]:.6f}"
         })
-        pbar.update(1)
+
+        logger.info(f"Step {i}: Training Loss: {loss.item():.4f}, Perplexity: {torch.exp(loss).item():.4f}, Grad Norm: {grad_norm.item():.4f}, lr: {scheduler.get_last_lr()[0]:.6f}")
+        wandb.log({
+            "train/loss": loss.item(),
+            "train/perplexity": torch.exp(loss).item(),
+            "train/grad_norm": grad_norm.item(),
+            "train/lr": scheduler.get_last_lr()[0],
+            "train/tokens_seen": total_tokens_seen,
+        },
+        step=i)
 
 
-        if i % config.val_interval == 0:
-            avg_loss, perplexity = validation(valds, model, config, n_steps=config.val_steps)
-            logger.info(f"Step {i}: Validation Loss: {avg_loss:.4f}, perplexity: {perplexity:.4f}")
+        if (i+1) % config.val_interval == 0:
+            val_loss = validation(valds, model, config, n_steps=config.val_steps)
+            logger.info(f"Step {i}: Validation Loss: {val_loss:.4f}, perplexity: {torch.exp(val_loss).item():.4f}")
             wandb.log({
-                "val/loss": avg_loss,
-                "val/perplexity": perplexity,
-                "val/tokens_seen": total_tokens_seen,
+                "val/loss": val_loss.item(),
+                "val/perplexity": torch.exp(val_loss).item(),
             }, step=i)
 
-        if i % config.log_interval == 0:
-            logger.info(f"Step {i}: Training Loss: {loss:.4f}, Grad Norm: {grad_norm:.4f}, LR: {scheduler.get_last_lr()[0]:.6f}")
-            wandb.log({
-                "train/loss": loss.item(),
-                "train/perplexity": torch.exp(loss).item(),
-                "train/grad_norm": grad_norm.item(),
-                "train/lr": scheduler.get_last_lr()[0],
-                "train/tokens_seen": total_tokens_seen,
-                "system/gpu_memory_allocated": torch.cuda.memory_allocated()/(2**30) if torch.cuda.is_available() else 0,
-                "system/gpu_memory_reserved": torch.cuda.memory_reserved()/(2**30) if torch.cuda.is_available() else 0,
-                "system/gpu_memory_free": (torch.cuda.memory_reserved() - torch.cuda.memory_allocated())/(2**30) if torch.cuda.is_available() else 0
-            },
-            step=i)
 
-        if i % config.checkpoint_interval == 0:
+        if (i+1) % config.checkpoint_interval == 0:
             checkpoint_path = os.path.join(config.checkpoint_dir, f"step_{i}.pt")
-            save_checkpoint(checkpoint_path, model, optimizer, i, scheduler)
+            save_checkpoint(model=model, optimizer=optimizer, iteration=i, out = checkpoint_path)
             logger.info(f"Checkpoint saved at step {i} to {checkpoint_path}")
             wandb.save(checkpoint_path)
+
+    wandb.finish()
 
         
 
