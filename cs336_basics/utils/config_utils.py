@@ -42,7 +42,7 @@ class TrainingConfig(BaseModel):
     log_path: str = "logs/training.log"
     #------ WandB configuration ------
     project: str = "cs336_assignment1_basics"
-    entity: str = "initial"
+    entity: str = "soumitrapy-iit-madras"
     run_name: str = "run_1"
     #------ Miscellaneous configuration ------
     device: str = "cpu"
