@@ -17,7 +17,7 @@ def setup_logging(config: TrainingConfig) -> None:
     )
     logging.info("Logging is set up.")
 
-def setup_wandb(config: TrainingConfig) -> wandb.Run:
+def setup_wandb(config: TrainingConfig) -> tuple[wandb.Run, wandb.Artifact]:
     run = wandb.init(project=config.project,
                      entity=config.entity,
                      name=config.run_name,

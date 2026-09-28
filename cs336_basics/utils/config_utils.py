@@ -22,7 +22,7 @@ class TrainingConfig(BaseModel):
     #------ LR Scheduler configuration ------
     min_lr: float = 1e-5
     warmup_step: int = 100
-    final_step: int = 1e4
+    final_step: int = 10000
     #------ Training configuration ------
     n_steps: int = 10000
     batch_size: int = 3
