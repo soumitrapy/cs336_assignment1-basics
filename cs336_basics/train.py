@@ -5,6 +5,7 @@ import os
 import yaml
 from tqdm import tqdm
 import random
+import wandb
 
 import torch
 from torch import Tensor
@@ -103,7 +104,7 @@ def train(**kwargs):
     config = TrainingConfig(**config)
     setup_seed(config.seed)
     setup_logging(config)
-    run, artifact = setup_wandb(config)
+    run = setup_wandb(config)
     #-------------- Data Loading --------------#
     trainds, valds = load_data(config)
     
@@ -164,6 +165,7 @@ def train(**kwargs):
             }
             checkpoint_path = os.path.join(config.checkpoint_dir, f"checkpoint_{i}.pt")
             save_checkpoint(model=model, optimizer=optimizer, iteration=iteration, out = checkpoint_path)
+            artifact = wandb.Artifact(name = f"{config.run_name}_checkpoint_{i}",type = "model")
             artifact.add_file(checkpoint_path, name=f"checkpoint_{i}.pt")
             run.log_artifact(artifact,
                              aliases=[f"checkpoint_{i}", "latest"])
