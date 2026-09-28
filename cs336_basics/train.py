@@ -114,6 +114,7 @@ def train(**kwargs):
     #-------------- Training Loop --------------#
     model.train()
     total_tokens_seen = 0
+    previous_path = None
     pbar = tqdm(range(iteration+1, iteration+1+config.n_steps), desc="Training")
     for i in pbar:
         x, y = get_batch(trainds, config.batch_size, config.context_len, device=config.device)
@@ -170,6 +171,12 @@ def train(**kwargs):
             run.log_artifact(artifact,
                              aliases=[f"checkpoint_{i}", "latest"])
             logger.info(f"Checkpoint saved at step {i} to {checkpoint_path}")
+
+            # for kaggle disk limit
+            if config.kaggle:
+                if previous_path is not None and os.path.exists(previous_path):
+                    os.remove(previous_path)
+                previous_path = checkpoint_path
 
     run.finish()
 

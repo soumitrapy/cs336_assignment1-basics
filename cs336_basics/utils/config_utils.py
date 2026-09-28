@@ -47,6 +47,7 @@ class TrainingConfig(BaseModel):
     #------ Miscellaneous configuration ------
     device: str = "cpu"
     seed: int = 42
+    kaggle: bool = False
 
     @model_validator(mode="before")
     @classmethod
