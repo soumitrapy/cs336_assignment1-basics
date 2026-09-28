@@ -4,6 +4,7 @@ from collections.abc import Iterator, Iterable
 import os
 import yaml
 from tqdm import tqdm
+import random
 
 import torch
 from torch import Tensor
@@ -101,7 +102,7 @@ def train(**kwargs):
     config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
     config = TrainingConfig(**config)
     setup_seed(config.seed)
-    run = setup_logging(config)
+    run, artifact = setup_logging(config)
     #-------------- Data Loading --------------#
     trainds, valds = load_data(config)
     
@@ -126,30 +127,46 @@ def train(**kwargs):
         })
 
         logger.info(f"Step {i}: Training Loss: {loss.item():.4f}, Perplexity: {torch.exp(loss).item():.4f}, Grad Norm: {grad_norm.item():.4f}, lr: {scheduler.get_last_lr()[0]:.6f}")
-        run.log({
+        metrics = {
+            "train/step": i,
             "train/loss": loss.item(),
             "train/perplexity": torch.exp(loss).item(),
             "train/grad_norm": grad_norm.item(),
-            "train/lr": scheduler.get_last_lr()[0],
+            "train/learning_rate": scheduler.get_last_lr()[0],
             "train/tokens_seen": total_tokens_seen,
-        },
-        step=i)
+        }
 
 
         if (i+1) % config.val_interval == 0:
             val_loss = validation(valds, model, config, n_steps=config.val_steps)
             logger.info(f"Step {i}: Validation Loss: {val_loss:.4f}, perplexity: {torch.exp(val_loss).item():.4f}")
-            run.log({
+            metrics.update({
                 "val/loss": val_loss.item(),
                 "val/perplexity": torch.exp(val_loss).item(),
-            }, step=i)
+            })
+        run.log(metrics)
 
 
-        if (i+1) % config.checkpoint_interval == 0:
-            checkpoint_path = os.path.join(config.checkpoint_dir, f"step_{i}.pt")
-            save_checkpoint(model=model, optimizer=optimizer, iteration=i, out = checkpoint_path)
+        if (i+1) % config.checkpoint_interval == 0 or (i+1) == (iteration + 1 + config.n_steps):
+            checkpoint = {
+                "iteration": i,
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "config": config.model_dump(),
+                "rng_state": {
+                    "python": random.getstate(),
+                    "numpy": np.random.get_state(),
+                    "torch": torch.get_rng_state(),
+                    "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+                }
+            }
+            checkpoint_path = os.path.join(config.checkpoint_dir, f"checkpoint_{i}.pt")
+            save_checkpoint(model=checkpoint["model"], optimizer=checkpoint["optimizer"], iteration=checkpoint["iteration"], out = checkpoint_path)
+            artifact.add_file(checkpoint_path, name=f"checkpoint_{i}.pt")
+            run.log_artifact(artifact,
+                             aliases=[f"checkpoint_{i}", "latest"])
             logger.info(f"Checkpoint saved at step {i} to {checkpoint_path}")
-            run.save(checkpoint_path)
 
     run.finish()
 

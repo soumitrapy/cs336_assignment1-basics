@@ -1,5 +1,5 @@
 import yaml
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 class TrainingConfig(BaseModel):
     #------ Dataset configuration ------
@@ -40,6 +40,10 @@ class TrainingConfig(BaseModel):
     #------ Logging configuration ------
     #log_interval: int = 100
     log_path: str = "logs/training.log"
+    #------ WandB configuration ------
+    project: str = "cs336_assignment1_basics"
+    entity: str = "initial"
+    run_name: str = "run_1"
     #------ Miscellaneous configuration ------
     device: str = "cpu"
     seed: int = 42
