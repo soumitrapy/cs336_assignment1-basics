@@ -21,7 +21,7 @@ class TrainingConfig(BaseModel):
     weight_decay: float = 0.1
     #------ LR Scheduler configuration ------
     min_lr: float = 1e-5
-    warmup_step: int = 1e2
+    warmup_step: int = 100
     final_step: int = 1e4
     #------ Training configuration ------
     n_steps: int = 10000
