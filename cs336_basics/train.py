@@ -21,7 +21,7 @@ from cs336_basics.utils.checkpointing import save_checkpoint, load_checkpoint
 from cs336_basics.nn.utils.clip_grad import gradient_clipping
 
 from cs336_basics.utils.seed_utils import setup_seed
-from cs336_basics.utils.logging_utils import setup_logging, get_logger
+from cs336_basics.utils.logging_utils import setup_logging, get_logger, setup_wandb
 
 logger = get_logger(__name__)
 
@@ -102,7 +102,8 @@ def train(**kwargs):
     config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
     config = TrainingConfig(**config)
     setup_seed(config.seed)
-    run, artifact = setup_logging(config)
+    setup_logging(config)
+    run, artifact = setup_wandb(config)
     #-------------- Data Loading --------------#
     trainds, valds = load_data(config)
     
@@ -137,7 +138,7 @@ def train(**kwargs):
         }
 
 
-        if (i+1) % config.val_interval == 0:
+        if (i+1) % config.val_interval == 0 or (i+1) == (iteration + 1 + config.n_steps):
             val_loss = validation(valds, model, config, n_steps=config.val_steps)
             logger.info(f"Step {i}: Validation Loss: {val_loss:.4f}, perplexity: {torch.exp(val_loss).item():.4f}")
             metrics.update({
