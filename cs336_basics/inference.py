@@ -12,9 +12,10 @@ def decoding(
         tau: float = 1.0,
         p: float = 1.0,
         max_new_tokens: int = 100,
-):
+        device: str = "cpu",
+    ) -> str:
     ids = tokenizer.encode(prompt)
-    x = torch.tensor(ids, dtype=torch.long, device=model.device).unsqueeze(0) # (1, seq_len)
+    x = torch.tensor(ids, dtype=torch.long, device=device).unsqueeze(0) # (1, seq_len)
     was_training = model.training
     model.eval()
     i = 0
