@@ -5,9 +5,10 @@ import torch
 from torch import Tensor
 
 def softmax(x: Float[Tensor, "..."],
-            dim: int = -1) -> Float[Tensor, "..."]:
+            dim: int = -1,
+            tau: float = 1.0) -> Float[Tensor, "..."]:
     y = x-x.max(dim=dim, keepdim=True).values
-    exp = torch.exp(y)
+    exp = torch.exp(y/tau)
     return exp / torch.sum(exp, dim=dim, keepdim=True)
 
 def scaled_dot_product_attention(q: Float[Tensor, "... query_seq_len d_k"],
